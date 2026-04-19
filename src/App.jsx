@@ -531,6 +531,12 @@ function App() {
 
   return (
     <div className="app-container">
+      {/* Animated Brand */}
+      <div className={`animated-brand ${isSidebarCollapsed ? 'brand-chat' : 'brand-sidebar'}`}>
+        <img src="/logo.jpg" alt="Logo" className="logo-img" onError={(e) => { e.target.style.display='none'; }} style={{ width: '24px', height: '24px', objectFit: 'contain', borderRadius: '50%' }} />
+        <span className="dolphin-logo-text">DOLPHIN</span>
+      </div>
+
       {/* Sidebar Overlay for Mobile */}
       <div className={`sidebar-overlay ${isSidebarCollapsed ? 'hidden' : ''}`} onClick={() => setIsSidebarCollapsed(true)}></div>
 
@@ -540,12 +546,6 @@ function App() {
           <button className="menu-btn" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}>
             <Menu size={20} />
           </button>
-          {!isSidebarCollapsed && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <img src="/logo.jpg" alt="Logo" style={{ width: '24px', height: '24px', objectFit: 'contain', borderRadius: '50%' }} onError={(e) => { e.target.style.display='none'; }} />
-              <span className="dolphin-logo-text">DOLPHIN</span>
-            </div>
-          )}
         </div>
 
         <button className="new-chat-btn" onClick={createNewChat}>
@@ -588,11 +588,13 @@ function App() {
             >
               <Menu size={20} />
             </button>
-            <span className="dolphin-logo-text">DOLPHIN</span>
-            <div className="model-selector" onClick={() => setIsSettingsOpen(true)}>
-              <span className="model-name">{model}</span>
-            </div>
+            <div className={`brand-spacer ${isSidebarCollapsed ? 'expanded' : 'collapsed'}`}></div>
           </div>
+          
+          <div className="model-selector" onClick={() => setIsSettingsOpen(true)}>
+            <span className="model-name">{model}</span>
+          </div>
+
           <button className="theme-toggle" onClick={() => setIsDark(!isDark)}>
             {isDark ? <Sun size={20} /> : <Moon size={20} />}
           </button>

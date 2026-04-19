@@ -55,6 +55,7 @@ body {
   display: flex;
   height: 100vh;
   width: 100vw;
+  position: relative;
 }
 
 /* Sidebar */
@@ -202,6 +203,7 @@ body {
   padding: 1rem 1.5rem;
   color: var(--text-secondary);
   font-size: 1.25rem;
+  position: relative;
 }
 
 .top-bar-left {
@@ -210,13 +212,50 @@ body {
   gap: 0.5rem;
 }
 
+.brand-spacer {
+  transition: width var(--transition-speed) ease, margin var(--transition-speed) ease;
+}
+.brand-spacer.collapsed {
+  width: 0;
+  margin-right: -0.5rem;
+}
+.brand-spacer.expanded {
+  width: 150px;
+  margin-right: 0;
+}
+
+.animated-brand {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  transition: all var(--transition-speed) ease;
+  z-index: 110;
+  pointer-events: none;
+}
+
+.brand-sidebar {
+  left: 64px;
+  top: 24px;
+}
+
+.brand-chat {
+  left: 92px;
+  top: 24px;
+}
+
 .dolphin-logo-text {
   font-weight: 500;
   font-size: 1.25rem;
   color: var(--text-secondary);
+  letter-spacing: 0.5px;
 }
 
 .model-selector {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -225,6 +264,7 @@ body {
   padding: 0.5rem 1rem;
   border-radius: 8px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .model-name {
@@ -743,6 +783,15 @@ body {
   }
   .info-item {
     grid-column: span 1 !important;
+  }
+  
+  .brand-sidebar {
+    left: 64px;
+    top: 24px;
+  }
+  .brand-chat {
+    left: 52px;
+    top: 8px;
   }
 }
 

@@ -44,12 +44,13 @@ It grants you the premium, sleek experience of a top-tier commercial AI applicat
 ## ✨ Key Features
 
 - 🎨 **Premium UI/UX**: A gorgeous dark-mode interface meticulously designed to feel modern, sleek, and highly responsive.
+- 🌊 **Fluid UI Animations**: Features a unified, responsive brand header that seamlessly glides between the sidebar and the beautifully centered chat layout as you navigate.
 - 📸 **Multi-Modal Vision Support**: Attach and preview images directly in the composer to chat with vision models.
 - 🧠 **Built-in Model Manager**: Pull, track download progress, and delete Ollama models directly from the UI settings.
 - 💻 **IDE-Grade Code Blocks**: Beautiful syntax highlighting leveraging premium developer fonts, rounded UI cards, and instant "Copy Code" visual feedback.
 - 💾 **Persistent Memory**: All chat histories and active conversations are automatically saved locally and survive page refreshes.
 - 📊 **Hardware Diagnostics**: Real-time system monitoring panel displaying your active CPU cores, RAM estimation, and GPU context.
-- 📱 **Progressive Web App (PWA)**: Fully responsive and natively installable as an app on your mobile device for offline usage.
+- 📱 **Progressive Web App (PWA)**: Fully responsive and natively installable as an app on your mobile device or desktop for offline usage.
 - 📜 **Smart Auto-Scroll**: Intelligent scroll locking ensures you can freely scroll up to read past messages without the live LLM stream forcing you back to the bottom.
 
 ---
@@ -73,6 +74,10 @@ It grants you the premium, sleek experience of a top-tier commercial AI applicat
    npm run dev
    ```
 5. Open your browser and navigate to `http://localhost:5173`.
+6. **Go Completely Offline (No Server Needed)**:
+   - While viewing Dolphin in your browser (Chrome/Edge/Brave), click the **Install App** icon on the far right side of your URL address bar.
+   - Dolphin will instantly install as a standalone native desktop application.
+   - You can now terminate the `npm run dev` server in your terminal! Going forward, just launch Dolphin directly from your computer's app launcher to use it 100% offline. *(Note: Ollama must still be running in the background to serve the AI).*
 
 ---
 
