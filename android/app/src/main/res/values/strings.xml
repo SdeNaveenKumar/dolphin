@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DOLPHIN</string>
+    <string name="title_activity_main">DOLPHIN</string>
+    <string name="package_name">com.dolphin.app</string>
+    <string name="custom_url_scheme">com.dolphin.app</string>
+</resources>
