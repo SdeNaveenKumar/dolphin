@@ -61,8 +61,8 @@ It grants you the premium, sleek experience of a top-tier commercial AI applicat
 1. **Install Ollama**: Ensure [Ollama](https://ollama.com/) is installed and running in the background.
 2. **Clone the Repository**:
    ```bash
-   git clone https://github.com/sdenaveenkumar/dolphine.git
-   cd dolphine
+   git clone https://github.com/sdenaveenkumar/dolphin.git
+   cd dolphin
    ```
 3. **Install Dependencies**:
    ```bash
@@ -85,8 +85,8 @@ Want to run Dolphin entirely on your Android phone, completely offline?
    Inside Termux, run:
    ```bash
    pkg install git nodejs
-   git clone https://github.com/sdenaveenkumar/dolphine.git
-   cd dolphine
+   git clone https://github.com/sdenaveenkumar/dolphin.git
+   cd dolphin
    npm install
    npm run dev
    ```
