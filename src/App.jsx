@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { 
-  Menu, Plus, MessageSquare, Settings, HelpCircle, 
-  Moon, Sun, Send, Image as ImageIcon, Mic, Sparkles, User, Bot, Square, Trash2, X, Download, RefreshCw, Copy, Check
+import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import {
+  Menu, Plus, MessageSquare, Settings, HelpCircle,
+  Moon, Sun, Send, Image as ImageIcon, Mic, Sparkles, User, Bot, Square, Trash2, X, Download, RefreshCw, Copy, Check, ArrowLeft, Monitor, Search, ChevronUp, ChevronDown
 } from 'lucide-react';
+import './index.css';
 
 const ALL_SUGGESTIONS = [
   { text: "Create a beautiful React component for a weather card", icon: Sparkles },
@@ -23,7 +24,27 @@ const ALL_SUGGESTIONS = [
   { text: "How do I fix a merge conflict in Git?", icon: HelpCircle },
 ];
 
-const CodeBlock = ({ language, codeString, ...props }) => {
+const SYSTEM_PROMPT = `Role: You are an expert AI Assistant specializing in high-clarity, aesthetically pleasing communication. Your goal is to provide responses that are visually organized, easy to scan, and sophisticated.
+
+Formatting Guidelines:
+
+Visual Hierarchy: Always start with a # Main Heading for the primary topic. Use ## Subheadings to break down different sections.
+
+Structure: Never use walls of text. Use short paragraphs (2-3 sentences max).
+
+Lists & Tables: Use bullet points for features and tables for comparisons or data-heavy information.
+
+Visual Accents: Use relevant emojis at the start of headings to add a splash of color (e.g., 🟢, 💡, 🛠️, 📈). Use horizontal rules --- to separate distinct topics.
+
+Emphasis: Use bolding for key terms and backticks for technical terms or variables.
+
+Callouts: Use > Blockquotes for important notes, tips, or warnings to make them stand out visually.
+
+Color Simulation: Since you output Markdown, use the "green" circle emoji 🟢 or green-themed headers to maintain a consistent "Gemini-style" color palette.
+
+Tone: Professional, clear, and supportive. Ensure the layout looks as good as the information it contains.`;
+
+const CodeBlock = ({ language, codeString, isDark, ...props }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -32,22 +53,45 @@ const CodeBlock = ({ language, codeString, ...props }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleDownload = () => {
+    const element = document.createElement("a");
+    const file = new Blob([codeString], { type: 'text/plain' });
+    element.href = URL.createObjectURL(file);
+    element.download = `code-${Date.now()}.${language || 'txt'}`;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
+
   return (
-    <div style={{ position: 'relative', margin: '1.5rem 0', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: 'var(--sidebar-bg)', padding: '8px 16px', color: 'var(--text-secondary)', fontSize: '0.85rem', borderBottom: '1px solid var(--border-color)', alignItems: 'center' }}>
-        <span style={{ fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase' }}>{language || 'text'}</span>
-        <button 
-          onClick={handleCopy}
-          style={{ background: 'transparent', border: 'none', color: copied ? 'var(--accent-color)' : 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '500', transition: 'color 0.2s' }}
-        >
-          {copied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
-        </button>
+    <div className={`code-block-container ${isDark ? 'dark-code' : 'light-code'}`}>
+      <div className="code-block-header">
+        <span className="code-lang">{language || 'text'}</span>
+        <div className="code-header-actions">
+          <button onClick={handleDownload} className="code-block-action-btn" title="Download">
+            <Download size={14} />
+          </button>
+          <button
+            onClick={handleCopy}
+            className={`code-block-action-btn ${copied ? 'copied' : ''}`}
+            title="Copy"
+          >
+            {copied ? <Check size={14} /> : <Copy size={14} />}
+          </button>
+        </div>
       </div>
       <SyntaxHighlighter
-        style={vscDarkPlus}
+        style={isDark ? vscDarkPlus : oneLight}
         language={language}
         PreTag="div"
-        customStyle={{ margin: 0, padding: '16px', backgroundColor: 'var(--input-bg)', borderTopLeftRadius: 0, borderTopRightRadius: 0, fontSize: '0.9rem', lineHeight: '1.5', fontFamily: '"JetBrains Mono", "Fira Code", Consolas, Monaco, monospace' }}
+        customStyle={{
+          margin: 0,
+          padding: '20px',
+          backgroundColor: 'transparent',
+          fontSize: '0.95rem',
+          lineHeight: '1.7',
+          fontFamily: 'var(--font-mono)'
+        }}
         {...props}
       >
         {codeString}
@@ -56,7 +100,45 @@ const CodeBlock = ({ language, codeString, ...props }) => {
   );
 };
 
-const MessageActions = ({ text, onRegenerate }) => {
+const HighlightText = ({ text, query }) => {
+  const safeText = text ? String(text) : '';
+  const searchTerm = query ? String(query).trim() : '';
+  
+  if (!searchTerm || !safeText) return <span>{safeText}</span>;
+  
+  try {
+    const escaped = searchTerm.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+    const regex = new RegExp(`(${escaped})`, 'gi');
+    const parts = safeText.split(regex);
+    
+    return (
+      <span>
+        {parts.map((part, i) => {
+          const isMatch = part.toLowerCase() === searchTerm.toLowerCase();
+          return isMatch ? (
+            <span key={i} className="search-highlight">{part}</span>
+          ) : (
+            <span key={i}>{part}</span>
+          );
+        })}
+      </span>
+    );
+  } catch (err) {
+    return <span>{safeText}</span>;
+  }
+};
+
+const ProcessChildren = (children, query) => {
+  if (!children) return children;
+  return React.Children.map(children, (child) => {
+    if (typeof child === 'string') {
+      return <HighlightText text={child} query={query} />;
+    }
+    return child;
+  });
+};
+
+const MessageActions = ({ text, onRegenerate, showRegenerate = true }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -67,28 +149,50 @@ const MessageActions = ({ text, onRegenerate }) => {
 
   return (
     <div className="message-actions">
-      <button className="icon-btn" title="Copy text" onClick={handleCopy}>
-        {copied ? <Check size={16} color="var(--accent-color)" /> : <Copy size={16} />}
+      <button className={`icon-btn ${copied ? 'copied' : ''}`} title="Copy text" onClick={handleCopy}>
+        {copied ? <Check size={16} color="#4ade80" /> : <Copy size={16} />}
       </button>
-      <button className="icon-btn" title="Regenerate" onClick={onRegenerate}>
-        <RefreshCw size={16} />
-      </button>
+      {showRegenerate && onRegenerate && (
+        <button className="icon-btn" title="Regenerate" onClick={onRegenerate}>
+          <RefreshCw size={16} />
+        </button>
+      )}
     </div>
   );
 };
 
-import './index.css';
-
 function App() {
+  const [themeMode, setThemeMode] = useState(() => localStorage.getItem('dolphin_theme_mode') || 'system');
   const [isDark, setIsDark] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [input, setInput] = useState('');
-  
+
+  useEffect(() => {
+    localStorage.setItem('dolphin_theme_mode', themeMode);
+
+    const applyTheme = () => {
+      if (themeMode === 'system') {
+        setIsDark(window.matchMedia('(prefers-color-scheme: dark)').matches);
+      } else {
+        setIsDark(themeMode === 'dark');
+      }
+    };
+
+    applyTheme();
+
+    if (themeMode === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const listener = (e) => setIsDark(e.matches);
+      mediaQuery.addEventListener('change', listener);
+      return () => mediaQuery.removeEventListener('change', listener);
+    }
+  }, [themeMode]);
+
+
   // Chat History State
   const [chats, setChats] = useState(() => {
     const saved = localStorage.getItem('dolphin_chats');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { return JSON.parse(saved); } catch (_e) { }
     }
     return [];
   });
@@ -96,11 +200,26 @@ function App() {
     return localStorage.getItem('dolphin_current_chat') || null;
   });
   const [messages, setMessages] = useState([]);
-  
+
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [searchMatchIndex, setSearchMatchIndex] = useState(0);
+  const [totalMatches, setTotalMatches] = useState(0);
+  const [input, setInput] = useState('');
+
+  useEffect(() => {
+    setSearchMatchIndex(0);
+  }, [chatSearchQuery, currentChatId]);
+
   const [isTyping, setIsTyping] = useState(false);
-  const [model, setModel] = useState('gemma4:e2b-it-q8_0');
-  const [models, setModels] = useState(['gemma4:e2b-it-q8_0']);
-  
+  const [model, setModel] = useState('Detecting...');
+  const [models, setModels] = useState([]);
+  const modelRef = useRef(model);
+
+  // Keep modelRef in sync with model state
+  useEffect(() => {
+    modelRef.current = model;
+  }, [model]);
+
   const [randomSuggestions, setRandomSuggestions] = useState([]);
 
   const refreshSuggestions = () => {
@@ -111,12 +230,68 @@ function App() {
   useEffect(() => {
     refreshSuggestions();
   }, []);
-  
-  // Settings Modal State
+
+  // Settings View State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState('profile');
+  const [userName, setUserName] = useState(() => localStorage.getItem('dolphin_user_name') || 'User');
+  const [userRole, setUserRole] = useState(() => localStorage.getItem('dolphin_user_role') || 'AI Enthusiast');
+  const [userBio, setUserBio] = useState(() => localStorage.getItem('dolphin_user_bio') || 'Passionate about exploring the frontiers of artificial intelligence.');
+  const [userEmail, setUserEmail] = useState(() => localStorage.getItem('dolphin_user_email') || 'user@example.com');
+  const [userAvatar, setUserAvatar] = useState(() => localStorage.getItem('dolphin_user_avatar') || null);
+
+  useEffect(() => {
+    localStorage.setItem('dolphin_user_name', userName);
+    localStorage.setItem('dolphin_user_role', userRole);
+    localStorage.setItem('dolphin_user_bio', userBio);
+    localStorage.setItem('dolphin_user_email', userEmail);
+    if (userAvatar) localStorage.setItem('dolphin_user_avatar', userAvatar);
+  }, [userName, userRole, userBio, userEmail, userAvatar]);
+
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [pullProgress, setPullProgress] = useState(null);
   const [pullingModel, setPullingModel] = useState('');
-  
+
+  const [accentColor, setAccentColor] = useState(() => {
+    return localStorage.getItem('dolphin_accent_color') || '#34a853';
+  });
+
+  const hexToRgb = (hex) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '52, 168, 83';
+  };
+
+  useEffect(() => {
+    localStorage.setItem('dolphin_accent_color', accentColor);
+    document.documentElement.style.setProperty('--accent-theme-color', accentColor);
+    document.documentElement.style.setProperty('--accent-color-rgb', hexToRgb(accentColor));
+  }, [accentColor]);
+
+  // Auto-switch to first matching chat when searching
+  useEffect(() => {
+    if (chatSearchQuery.trim() && chats.length > 0) {
+      const query = chatSearchQuery.toLowerCase();
+
+      // Check if current chat already has a match
+      const currentChat = chats.find(c => c.id === currentChatId);
+      const currentHasMatch = currentChat && (
+        (currentChat.title || '').toLowerCase().includes(query) ||
+        (currentChat.messages || []).some(m => (m.content || '').toLowerCase().includes(query))
+      );
+
+      if (!currentHasMatch) {
+        // Find first chat that HAS a match
+        const firstMatch = chats.find(c =>
+          (c.title || '').toLowerCase().includes(query) ||
+          (c.messages || []).some(m => (m.content || '').toLowerCase().includes(query))
+        );
+        if (firstMatch && firstMatch.id !== currentChatId) {
+          setCurrentChatId(firstMatch.id);
+        }
+      }
+    }
+  }, [chatSearchQuery]);
+
   const [selectedImage, setSelectedImage] = useState(null);
 
   const [hardwareInfo, setHardwareInfo] = useState({
@@ -135,8 +310,10 @@ function App() {
   const abortControllerRef = useRef(null);
   const pullAbortControllerRef = useRef(null);
   const fileInputRef = useRef(null);
-  
+
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false);
+
+  const isModelValid = model && !['Detecting...', 'No model running', 'Ollama not running'].includes(model);
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -189,6 +366,33 @@ function App() {
     }
   }, [currentChatId, chats]);
 
+  // Auto-scroll to search matches
+  useEffect(() => {
+    if (chatSearchQuery.trim()) {
+      const timer = setTimeout(() => {
+        const matches = document.querySelectorAll('.messages-list .search-highlight');
+        setTotalMatches(matches.length);
+
+        if (matches.length > 0) {
+          // Remove active class from all
+          matches.forEach(m => m.classList.remove('active'));
+
+          // Get safe index
+          const idx = Math.abs(searchMatchIndex % matches.length);
+          const currentMatch = matches[idx];
+
+          if (currentMatch) {
+            currentMatch.classList.add('active');
+            currentMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    } else {
+      setTotalMatches(0);
+    }
+  }, [chatSearchQuery, currentChatId, searchMatchIndex]);
+
   // Apply dark mode
   useEffect(() => {
     if (isDark) {
@@ -198,10 +402,38 @@ function App() {
     }
   }, [isDark]);
 
-  // Fetch available models and system info
+  // Fetch models — defined before the useEffect that calls it
+  const fetchModels = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:11434/api/tags');
+      if (response.ok) {
+        const data = await response.json();
+        const modelNames = (data.models || []).map(m => m.name);
+        setModels(modelNames);
+
+        if (modelNames.length > 0) {
+          const currentModel = modelRef.current;
+          if (currentModel === 'Detecting...' || !modelNames.includes(currentModel)) {
+            setModel(modelNames[0]);
+          }
+        } else {
+          setModel('No model running');
+        }
+      } else {
+        setModels([]);
+        setModel('No model running');
+      }
+    } catch (error) {
+      console.error('Error fetching models:', error);
+      setModels([]);
+      setModel('Ollama not running');
+    }
+  };
+
+  // Fetch available models and system info on mount
   useEffect(() => {
     fetchModels();
-    
+
     // Get GPU info
     try {
       const canvas = document.createElement('canvas');
@@ -212,7 +444,7 @@ function App() {
         if (debugInfo) gpu = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
       }
       setHardwareInfo(prev => ({ ...prev, gpu }));
-    } catch(e) {}
+    } catch (_gpuErr) { /* silent */ }
 
     // Get storage info
     if (navigator.storage && navigator.storage.estimate) {
@@ -226,28 +458,9 @@ function App() {
     }
   }, []);
 
-  const fetchModels = async () => {
-    try {
-      const response = await fetch('http://127.0.0.1:11434/api/tags');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.models && data.models.length > 0) {
-          const modelNames = data.models.map(m => m.name);
-          setModels(modelNames);
-          if (!modelNames.includes(model) && modelNames.length > 0) {
-            setModel(modelNames[0]);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching models:', error);
-    }
-  };
-
   const handleScroll = () => {
     if (chatContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
-      // If the user scrolls up more than 100px from the bottom, they have scrolled up manually
       const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
       setUserHasScrolledUp(!isNearBottom);
     }
@@ -261,6 +474,7 @@ function App() {
 
   useEffect(() => {
     scrollToBottom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, isTyping]);
 
   const handleInput = (e) => {
@@ -310,20 +524,20 @@ function App() {
 
     const currentMessages = overrideMessages !== null ? overrideMessages : messages;
     const userMessage = { role: 'user', content: textToSubmit.trim() };
-    
+
     if (selectedImage && overrideMessages === null) {
       userMessage.images = [selectedImage.base64];
       userMessage.displayImage = selectedImage.dataUrl;
     }
-    
+
     const newMessagesContext = [...currentMessages, userMessage];
     setMessages(newMessagesContext);
     saveMessageToChat(activeChatId, newMessagesContext);
-    
+
     setInput('');
     setSelectedImage(null);
     setIsTyping(true);
-    
+
     if (textareaRef.current) {
       textareaRef.current.style.height = '44px';
     }
@@ -331,20 +545,23 @@ function App() {
     abortControllerRef.current = new AbortController();
 
     try {
-      // Use current message history for context
-      const apiMessages = newMessagesContext.map(msg => {
-        const out = { role: msg.role, content: msg.content };
-        if (msg.images) {
-          out.images = msg.images;
-        }
-        return out;
-      });
+      const dynamicSystemPrompt = `${SYSTEM_PROMPT}\n\nUser Context:\n- Name: ${userName}\n- Role: ${userRole}\n- Bio: ${userBio}`;
+      const apiMessages = [
+        { role: 'system', content: dynamicSystemPrompt },
+        ...newMessagesContext.map(msg => {
+          const out = { role: msg.role, content: msg.content };
+          if (msg.images) {
+            out.images = msg.images;
+          }
+          return out;
+        })
+      ];
 
       const response = await fetch('http://127.0.0.1:11434/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: model,
+          model: modelRef.current,
           messages: apiMessages,
           stream: true,
         }),
@@ -366,10 +583,10 @@ function App() {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        
+
         const chunk = decoder.decode(value, { stream: true });
         const lines = chunk.split('\n').filter(line => line.trim() !== '');
-        
+
         for (const line of lines) {
           try {
             const data = JSON.parse(line);
@@ -434,18 +651,18 @@ function App() {
 
   const pullModel = async (modelName) => {
     if (!modelName.trim() || pullingModel) return;
-    
+
     let baseModel = modelName.split(':')[0];
     let sizeEstimate = MODEL_SIZES[baseModel] || 'Unknown size (could be several GBs)';
-    
+
     const confirmPull = window.confirm(`Are you sure you want to pull "${modelName}"?\nStorage required: ${sizeEstimate}\n\nDo you want to continue?`);
     if (!confirmPull) return;
 
     setPullingModel(modelName);
     setPullProgress('Starting download...');
-    
+
     pullAbortControllerRef.current = new AbortController();
-    
+
     try {
       const response = await fetch('http://127.0.0.1:11434/api/pull', {
         method: 'POST',
@@ -453,17 +670,17 @@ function App() {
         body: JSON.stringify({ name: modelName, stream: true }),
         signal: pullAbortControllerRef.current.signal
       });
-      
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        
+
         const chunk = decoder.decode(value, { stream: true });
         const lines = chunk.split('\n').filter(line => line.trim() !== '');
-        
+
         for (const line of lines) {
           try {
             const data = JSON.parse(line);
@@ -477,7 +694,7 @@ function App() {
               }
               setPullProgress(prog);
             }
-          } catch(e) {}
+          } catch (_parseErr) { /* silent JSON parse error */ }
         }
       }
       setPullProgress('Download complete!');
@@ -533,7 +750,7 @@ function App() {
     <div className="app-container">
       {/* Animated Brand */}
       <div className={`animated-brand ${isSidebarCollapsed ? 'brand-chat' : 'brand-sidebar'}`}>
-        <img src="/logo.jpg" alt="Logo" className="logo-img" onError={(e) => { e.target.style.display='none'; }} style={{ width: '24px', height: '24px', objectFit: 'contain', borderRadius: '50%' }} />
+        <img src="/logo.jpg" alt="Logo" className="logo-img" onError={(e) => { e.target.style.display = 'none'; }} style={{ width: '24px', height: '24px', objectFit: 'contain', borderRadius: '50%' }} />
         <span className="dolphin-logo-text">DOLPHIN</span>
       </div>
 
@@ -548,21 +765,58 @@ function App() {
           </button>
         </div>
 
-        <button className="new-chat-btn" onClick={createNewChat}>
+        <button className="new-chat-btn" onClick={() => { createNewChat(); setIsSettingsOpen(false); }}>
           <Plus size={20} />
           <span className="new-chat-text">New chat</span>
         </button>
 
+        <div className="sidebar-search-container">
+          <Search size={16} className="search-icon-sidebar" />
+          <input
+            type="text"
+            placeholder="Search chats..."
+            value={chatSearchQuery}
+            onChange={(e) => setChatSearchQuery(e.target.value)}
+            className="sidebar-search-input"
+          />
+          {chatSearchQuery && totalMatches > 0 && (
+            <div className="search-nav-controls">
+              <span className="search-count">{searchMatchIndex + 1} / {totalMatches}</span>
+              <button
+                className="search-nav-btn"
+                onClick={() => setSearchMatchIndex(prev => (prev - 1 + totalMatches) % totalMatches)}
+                title="Previous match"
+              >
+                <ChevronUp size={14} />
+              </button>
+              <button
+                className="search-nav-btn"
+                onClick={() => setSearchMatchIndex(prev => (prev + 1) % totalMatches)}
+                title="Next match"
+              >
+                <ChevronDown size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="recent-chats">
           <div className="recent-chats-title">Recent</div>
-          {chats.map(chat => (
-            <div 
-              key={chat.id} 
+          {chats.filter(c => {
+            const query = chatSearchQuery.toLowerCase();
+            const titleMatch = (c.title || '').toLowerCase().includes(query);
+            const contentMatch = (c.messages || []).some(m => (m.content || '').toLowerCase().includes(query));
+            return titleMatch || contentMatch;
+          }).map(chat => (
+            <div
+              key={chat.id}
               className={`sidebar-item ${currentChatId === chat.id ? 'active' : ''}`}
-              onClick={() => setCurrentChatId(chat.id)}
+              onClick={() => { setCurrentChatId(chat.id); setIsSettingsOpen(false); }}
             >
               <MessageSquare size={18} />
-              <span className="chat-title">{chat.title}</span>
+              <span className="chat-title">
+                <HighlightText text={chat.title} query={chatSearchQuery} />
+              </span>
               <button className="delete-btn" onClick={(e) => deleteChat(e, chat.id)}>
                 <Trash2 size={16} />
               </button>
@@ -571,7 +825,7 @@ function App() {
         </div>
 
         <div className="sidebar-bottom">
-          <div className="sidebar-item" onClick={() => setIsSettingsOpen(true)}>
+          <div className={`sidebar-item ${isSettingsOpen ? 'active' : ''}`} onClick={() => setIsSettingsOpen(!isSettingsOpen)}>
             <Settings size={18} />
             <span>Settings</span>
           </div>
@@ -582,301 +836,547 @@ function App() {
       <div className="main-content">
         <div className="top-bar">
           <div className="top-bar-left">
-            <button 
-              className="mobile-menu-btn" 
+            <button
+              className="mobile-menu-btn"
               onClick={() => setIsSidebarCollapsed(false)}
             >
               <Menu size={20} />
             </button>
             <div className={`brand-spacer ${isSidebarCollapsed ? 'expanded' : 'collapsed'}`}></div>
           </div>
-          
-          <div className="model-selector" onClick={() => setIsSettingsOpen(true)}>
-            <span className="model-name">{model}</span>
-          </div>
 
-          <button className="theme-toggle" onClick={() => setIsDark(!isDark)}>
-            {isDark ? <Sun size={20} /> : <Moon size={20} />}
+          {!isSettingsOpen && (
+            <div className="model-selector-group">
+              <div className="model-selector-wrapper">
+                <div className="model-selector" onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}>
+                  <span className="model-name">{model}</span>
+                </div>
+
+                {isModelDropdownOpen && (
+                  <>
+                    <div className="dropdown-overlay" onClick={() => setIsModelDropdownOpen(false)}></div>
+                    <div className="model-dropdown-menu">
+                      <div className="dropdown-header">Select Model</div>
+                      <div className="dropdown-list">
+                        {models.length > 0 ? (
+                          models.map(m => (
+                            <div
+                              key={m}
+                              className={`dropdown-item ${m === model ? 'active' : ''}`}
+                              onClick={() => {
+                                modelRef.current = m;
+                                setModel(m);
+                                setIsModelDropdownOpen(false);
+                              }}
+                            >
+                              <Sparkles size={14} className="item-icon" />
+                              <span className="item-name">{m}</span>
+                              {m === model && <Check size={14} className="active-check" />}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="dropdown-no-models">No models installed</div>
+                        )}
+                      </div>
+                      <div className="dropdown-footer" onClick={() => { setIsSettingsOpen(true); setIsModelDropdownOpen(false); }}>
+                        <Settings size={14} />
+                        <span>Manage Models</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+              <button className="icon-btn refresh-top-btn" onClick={fetchModels} title="Refresh models">
+                <RefreshCw size={16} />
+              </button>
+            </div>
+          )}
+
+          <button className="theme-toggle" onClick={() => {
+            if (themeMode === 'light') setThemeMode('dark');
+            else if (themeMode === 'dark') setThemeMode('system');
+            else setThemeMode('light');
+          }} title={`Switch to ${themeMode === 'light' ? 'Dark' : themeMode === 'dark' ? 'System' : 'Light'} mode`}>
+            {themeMode === 'light' ? <Sun size={20} /> : themeMode === 'dark' ? <Moon size={20} /> : <Monitor size={20} />}
           </button>
         </div>
 
-        <div className="chat-container" ref={chatContainerRef} onScroll={handleScroll}>
-          {messages.length === 0 ? (
-            <div className="welcome-screen">
-              <div style={{ marginBottom: '1rem' }}>
-                <img src="/logo.jpg" alt="Dolphin Logo" className="logo-img" style={{ width: '64px', height: '64px' }} onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='block'; }}/>
-                <svg style={{ display: 'none', width: '64px', height: '64px', color: 'var(--accent-color)' }} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M18.5 7.5C18.5 7.5 16 5 12 5C8 5 4.5 8 4.5 12C4.5 12 4.5 15.5 8 18L10 20.5L12 18.5C14 16.5 16.5 14.5 18 12C19.5 9.5 18.5 7.5 18.5 7.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+        {isSettingsOpen ? (
+          <div className="settings-view">
+            <div className="settings-sidebar">
+              <div className="settings-sidebar-header">
+                <button className="icon-btn back-btn" onClick={() => setIsSettingsOpen(false)}>
+                  <ArrowLeft size={20} />
+                </button>
+                <h2>Settings</h2>
               </div>
-              <h1 className="greeting">
-                <span className="greeting-hello">Hello, User.</span>
-              </h1>
-              <h2 className="greeting-sub">How can I help you today?</h2>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginTop: '2rem' }}>
-                <span style={{color: 'var(--text-secondary)'}}>Try asking about...</span>
-                <button 
-                  onClick={refreshSuggestions}
-                  style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                  title="Refresh suggestions"
+              <nav className="settings-nav">
+                <button
+                  className={`nav-item ${settingsTab === 'profile' ? 'active' : ''}`}
+                  onClick={() => setSettingsTab('profile')}
                 >
-                  <RefreshCw size={16} />
+                  <User size={18} />
+                  <span>Profile</span>
+                </button>
+                <button
+                  className={`nav-item ${settingsTab === 'general' ? 'active' : ''}`}
+                  onClick={() => setSettingsTab('general')}
+                >
+                  <Sparkles size={18} />
+                  <span>General</span>
+                </button>
+                <button
+                  className={`nav-item ${settingsTab === 'models' ? 'active' : ''}`}
+                  onClick={() => setSettingsTab('models')}
+                >
+                  <Bot size={18} />
+                  <span>Models</span>
+                </button>
+                <button
+                  className={`nav-item ${settingsTab === 'system' ? 'active' : ''}`}
+                  onClick={() => setSettingsTab('system')}
+                >
+                  <Settings size={18} />
+                  <span>System</span>
+                </button>
+              </nav>
+              <div className="settings-sidebar-footer">
+                <button
+                  className="reset-app-btn"
+                  onClick={() => {
+                    if (confirm('Reset all chats and settings?')) {
+                      localStorage.clear();
+                      window.location.reload();
+                    }
+                  }}
+                >
+                  <Trash2 size={16} />
+                  <span>Reset App</span>
                 </button>
               </div>
-              <div className="suggestions" style={{ marginTop: '1rem' }}>
-                {randomSuggestions.map((sugg, i) => {
-                  const Icon = sugg.icon;
-                  return (
-                    <div key={i} className="suggestion-card" onClick={() => handleSubmit(sugg.text)}>
-                      <p>{sugg.text}</p>
-                      <div className="suggestion-icon"><Icon size={18} /></div>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
-          ) : (
-            <div className="messages-list">
-              {messages.map((msg, index) => (
-                <div key={index} className={`message ${msg.role === 'user' ? 'message-user' : 'message-bot'}`}>
-                  {msg.role === 'assistant' && (
-                    <div className="message-avatar bot-avatar">
-                      <img src="/logo.jpg" alt="Dolphin" className="logo-img" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='block'; }}/>
-                      <svg style={{ display: 'none', width: '24px', height: '24px' }} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M18.5 7.5C18.5 7.5 16 5 12 5C8 5 4.5 8 4.5 12C4.5 12 4.5 15.5 8 18L10 20.5L12 18.5C14 16.5 16.5 14.5 18 12C19.5 9.5 18.5 7.5 18.5 7.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </div>
-                  )}
-                  <div className="message-content">
-                    {msg.displayImage && (
-                      <div style={{ marginBottom: '8px' }}>
-                        <img src={msg.displayImage} alt="Attached" style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px' }} />
-                      </div>
-                    )}
-                    {msg.role === 'user' ? (
-                      <div>{msg.content}</div>
-                    ) : (
-                      <div className="markdown-body">
-                        <ReactMarkdown 
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            code({node, inline, className, children, ...props}) {
-                              const match = /language-(\w+)/.exec(className || '');
-                              const codeString = String(children).replace(/\n$/, '');
-                              return !inline && match ? (
-                                <CodeBlock language={match[1]} codeString={codeString} {...props} />
-                              ) : (
-                                <code className={className} {...props}>
-                                  {children}
-                                </code>
-                              )
-                            }
-                          }}
-                        >
-                          {msg.content}
-                        </ReactMarkdown>
-                        {isTyping && index === messages.length - 1 && (
-                          <span className="cursor-blink"></span>
+
+            <div className="settings-content">
+              {settingsTab === 'profile' && (
+                <div className="settings-pane">
+                  <div className="pane-header">
+                    <h3>User Profile</h3>
+                    <p>Manage your identity and how the assistant addresses you.</p>
+                  </div>
+
+                  <div className="profile-header-section">
+                    <div className="avatar-upload-container">
+                      <div className="avatar-preview">
+                        {userAvatar ? (
+                          <img src={userAvatar} alt="Avatar" />
+                        ) : (
+                          <div className="avatar-placeholder">
+                            <User size={40} />
+                          </div>
                         )}
-                        {!isTyping && msg.role === 'assistant' && (
-                          <MessageActions 
-                            text={msg.content} 
-                            onRegenerate={() => regenerateMessage(index)} 
+                        <label className="avatar-edit-overlay">
+                          <ImageIcon size={20} />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            hidden
+                            onChange={(e) => {
+                              const file = e.target.files[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => setUserAvatar(reader.result);
+                                reader.readAsDataURL(file);
+                              }
+                            }}
                           />
-                        )}
+                        </label>
+                      </div>
+                      <div className="avatar-info">
+                        <h4>Profile Picture</h4>
+                        <p>Upload a square image for best results.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="settings-group">
+                    <div className="profile-grid">
+                      <div className="profile-field">
+                        <label className="group-label">Display Name</label>
+                        <input
+                          type="text"
+                          value={userName}
+                          onChange={(e) => setUserName(e.target.value)}
+                          placeholder="Your Name"
+                          className="modern-input"
+                        />
+                      </div>
+                      <div className="profile-field">
+                        <label className="group-label">Role / Title</label>
+                        <input
+                          type="text"
+                          value={userRole}
+                          onChange={(e) => setUserRole(e.target.value)}
+                          placeholder="e.g. Developer, Student"
+                          className="modern-input"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="settings-group">
+                    <label className="group-label">Email Address</label>
+                    <input
+                      type="email"
+                      value={userEmail}
+                      onChange={(e) => setUserEmail(e.target.value)}
+                      placeholder="email@example.com"
+                      className="modern-input"
+                    />
+                  </div>
+
+                  <div className="settings-group">
+                    <label className="group-label">Short Bio</label>
+                    <textarea
+                      value={userBio}
+                      onChange={(e) => setUserBio(e.target.value)}
+                      placeholder="Tell us a bit about yourself..."
+                      className="modern-textarea"
+                      rows={4}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {settingsTab === 'general' && (
+                <div className="settings-pane">
+                  <div className="pane-header">
+                    <h3>Appearance</h3>
+                    <p>Customize how the assistant looks and feels.</p>
+                  </div>
+                  <div className="settings-group">
+                    <label className="group-label">Accent Color</label>
+                    <p className="group-desc">Choose the color for bullet points, markers, and callouts.</p>
+                    <div className="color-palette">
+                      {['#34a853', '#4285f4', '#ea4335', '#fbbc05', '#9b72cb', '#00c897', '#d96570'].map(c => (
+                        <button
+                          key={c}
+                          className={`color-swatch ${accentColor === c ? 'active' : ''}`}
+                          style={{ backgroundColor: c }}
+                          onClick={() => setAccentColor(c)}
+                        />
+                      ))}
+                      <div className="custom-color-container" title="Choose custom color">
+                        <input
+                          type="color"
+                          value={accentColor}
+                          onChange={(e) => setAccentColor(e.target.value)}
+                          className="custom-color-input"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="settings-group">
+                    <label className="group-label">Theme Mode</label>
+                    <p className="group-desc">Choose between light, dark, or follow your system settings.</p>
+                    <div className="theme-selector-group">
+                      <button
+                        className={`theme-opt-btn ${themeMode === 'light' ? 'active' : ''}`}
+                        onClick={() => setThemeMode('light')}
+                      >
+                        <Sun size={18} />
+                        <span>Light</span>
+                      </button>
+                      <button
+                        className={`theme-opt-btn ${themeMode === 'dark' ? 'active' : ''}`}
+                        onClick={() => setThemeMode('dark')}
+                      >
+                        <Moon size={18} />
+                        <span>Dark</span>
+                      </button>
+                      <button
+                        className={`theme-opt-btn ${themeMode === 'system' ? 'active' : ''}`}
+                        onClick={() => setThemeMode('system')}
+                      >
+                        <Monitor size={18} />
+                        <span>System</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {settingsTab === 'models' && (
+                <div className="settings-pane">
+                  <div className="pane-header">
+                    <h3>Model Management</h3>
+                    <p>Manage installed AI models and download new ones from Ollama.</p>
+                  </div>
+
+                  <div className="settings-group">
+                    <div className="group-header-row">
+                      <label className="group-label">Installed Models</label>
+                      <button className="icon-btn small-btn" onClick={fetchModels}>
+                        <RefreshCw size={14} />
+                      </button>
+                    </div>
+                    <div className="installed-models-grid">
+                      {models.map(m => (
+                        <div key={m} className={`model-card ${m === model ? 'active' : ''}`}>
+                          <div className="model-card-main" onClick={() => { modelRef.current = m; setModel(m); }}>
+                            <span className="model-name">{m}</span>
+                            {m === model && <span className="active-tag">Active</span>}
+                          </div>
+                          <button className="delete-btn" onClick={() => deleteModel(m)}>
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                      {models.length === 0 && <div className="empty-state">No models installed.</div>}
+                    </div>
+                  </div>
+
+                  <div className="settings-group">
+                    <label className="group-label">Install New Model</label>
+                    <div className="pull-form-modern">
+                      <input
+                        type="text"
+                        id="modelNameInput"
+                        placeholder="e.g. llama3, mistral..."
+                        className="modern-input"
+                      />
+                      <button
+                        className="modern-pull-btn"
+                        disabled={!!pullingModel}
+                        onClick={() => {
+                          const val = document.getElementById('modelNameInput').value;
+                          if (val) pullModel(val);
+                        }}
+                      >
+                        <Download size={16} />
+                        <span>Pull</span>
+                      </button>
+                    </div>
+                    {pullProgress && (
+                      <div className="pull-progress-bar">
+                        <div className="progress-text">{pullProgress}</div>
+                        {pullingModel && <button onClick={stopPulling} className="cancel-pull-btn"><X size={14} /></button>}
                       </div>
                     )}
                   </div>
-                  {msg.role === 'user' && (
-                    <div className="message-avatar">
-                      <User size={20} color="var(--text-secondary)" />
-                    </div>
-                  )}
                 </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-          )}
-        </div>
+              )}
 
-        <div className="input-area">
-          <div className="input-box" style={{ flexDirection: selectedImage ? 'column' : 'row', alignItems: selectedImage ? 'stretch' : 'flex-end' }}>
-            {selectedImage && (
-              <div style={{ position: 'relative', alignSelf: 'flex-start', margin: '16px 0 0 16px' }}>
-                <img src={selectedImage.dataUrl} alt="Preview" style={{ height: '60px', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
-                <button 
-                  onClick={() => setSelectedImage(null)}
-                  style={{ position: 'absolute', top: '-8px', right: '-8px', background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '50%', padding: '2px', cursor: 'pointer', color: 'var(--text-primary)', display: 'flex' }}
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            )}
-            <div style={{ display: 'flex', width: '100%', alignItems: 'center', paddingTop: selectedImage ? '8px' : '0' }}>
-              <input 
-                type="file" 
-                accept="image/*" 
-                ref={fileInputRef} 
-                style={{ display: 'none' }} 
-                onChange={handleImageUpload} 
-              />
-              <button className="icon-btn" title="Add image" onClick={() => fileInputRef.current?.click()}>
-                <ImageIcon size={20} />
-              </button>
-              <textarea
-                ref={textareaRef}
-                className="input-field"
-                placeholder="Enter a prompt here"
-                value={input}
-                onChange={handleInput}
-                onKeyDown={handleKeyDown}
-                rows={1}
-              />
-              <div className="input-actions">
-                <button className="icon-btn" title="Use microphone">
-                  <Mic size={20} />
-                </button>
-              {isTyping ? (
-                <button className="icon-btn stop-btn active" onClick={stopGeneration} title="Stop generating">
-                  <Square fill="currentColor" size={16} />
-                </button>
-              ) : (
-                <button 
-                  className={`icon-btn send-btn ${input.trim() ? 'active' : ''}`} 
-                  onClick={() => handleSubmit()}
-                  disabled={!input.trim()}
-                >
-                  <Send size={20} />
-                </button>
+              {settingsTab === 'system' && (
+                <div className="settings-pane">
+                  <div className="pane-header">
+                    <h3>System Status</h3>
+                    <p>Hardware information and local API connectivity.</p>
+                  </div>
+                  <div className="system-grid-modern">
+                    <div className="system-item">
+                      <span className="item-label">CPU Cores</span>
+                      <span className="item-value">{hardwareInfo.cpu}</span>
+                    </div>
+                    <div className="system-item">
+                      <span className="item-label">Memory (RAM)</span>
+                      <span className="item-value">{hardwareInfo.ram}</span>
+                    </div>
+                    <div className="system-item wide">
+                      <span className="item-label">Graphics Card (GPU)</span>
+                      <span className="item-value">{hardwareInfo.gpu}</span>
+                    </div>
+                    <div className="system-item">
+                      <span className="item-label">Storage Quota</span>
+                      <span className="item-value">{hardwareInfo.storageTotal}</span>
+                    </div>
+                    <div className="system-item">
+                      <span className="item-label">Storage Used</span>
+                      <span className="item-value">{hardwareInfo.storageUsed}</span>
+                    </div>
+                    <div className="system-item wide">
+                      <span className="item-label">Ollama Connection</span>
+                      <span className="item-value">http://127.0.0.1:11434</span>
+                    </div>
+                  </div>
+                  <div className="version-info">
+                    Dolphin AI v1.0.0 • Connected to Ollama Engine
+                  </div>
+                </div>
               )}
             </div>
-            </div>
           </div>
-        </div>
-      </div>
-
-      {/* Settings Modal */}
-      {isSettingsOpen && (
-        <div className="modal-overlay" onClick={() => setIsSettingsOpen(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Settings</h2>
-              <button className="icon-btn" onClick={() => setIsSettingsOpen(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="modal-body">
-              <div className="settings-section">
-                <h3>Installed Models</h3>
-                <div className="installed-models-list">
-                  {models.map(m => (
-                    <div key={m} className={`installed-model-item ${m === model ? 'active' : ''}`}>
-                      <span onClick={() => setModel(m)} style={{cursor: 'pointer', flexGrow: 1, fontWeight: m === model ? '500' : 'normal', color: m === model ? 'var(--accent-color)' : 'inherit'}}>{m} {m === model && '(Active)'}</span>
-                      <button className="icon-btn delete-model-btn" title="Delete model" onClick={() => deleteModel(m)}>
-                        <Trash2 size={16} />
-                      </button>
+        ) : (
+          <>
+            <div className="chat-container" ref={chatContainerRef} onScroll={handleScroll}>
+              {messages.length === 0 ? (
+                <div className="welcome-screen">
+                  <div style={{ marginBottom: '1rem' }}>
+                    <img src="/logo.jpg" alt="Dolphin Logo" className="logo-img" style={{ width: '64px', height: '64px' }} onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }} />
+                    <svg style={{ display: 'none', width: '64px', height: '64px', color: 'var(--accent-color)' }} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M18.5 7.5C18.5 7.5 16 5 12 5C8 5 4.5 8 4.5 12C4.5 12 4.5 15.5 8 18L10 20.5L12 18.5C14 16.5 16.5 14.5 18 12C19.5 9.5 18.5 7.5 18.5 7.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <h1 className="greeting">
+                    <span className="greeting-hello">Hello, {userName}.</span>
+                  </h1>
+                  <h2 className="greeting-sub">How can I help you today?</h2>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginTop: '2rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Try asking about...</span>
+                    <button
+                      onClick={refreshSuggestions}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                      title="Refresh suggestions"
+                    >
+                      <RefreshCw size={16} />
+                    </button>
+                  </div>
+                  <div className="suggestions" style={{ marginTop: '1rem' }}>
+                    {randomSuggestions.map((sugg, i) => {
+                      const Icon = sugg.icon;
+                      return (
+                        <div key={i} className="suggestion-card" onClick={() => handleSubmit(sugg.text)}>
+                          <p>{sugg.text}</p>
+                          <div className="suggestion-icon"><Icon size={18} /></div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="messages-list">
+                  {(messages || []).map((msg, index) => (
+                    <div key={index} className={`message ${msg.role === 'user' ? 'message-user' : 'message-bot'}`}>
+                      {msg.role === 'assistant' && (
+                        <div className="message-avatar bot-avatar">
+                          <img src="/logo.jpg" alt="Dolphin" className="logo-img" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }} />
+                          <svg style={{ display: 'none', width: '24px', height: '24px' }} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M18.5 7.5C18.5 7.5 16 5 12 5C8 5 4.5 8 4.5 12C4.5 12 4.5 15.5 8 18L10 20.5L12 18.5C14 16.5 16.5 14.5 18 12C19.5 9.5 18.5 7.5 18.5 7.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </div>
+                      )}
+                      {msg.role === 'user' && (
+                        <div className="message-avatar user-avatar-right">
+                          {userAvatar ? (
+                            <img src={userAvatar} alt="User" className="chat-avatar-img" />
+                          ) : (
+                            <User size={20} color="var(--text-secondary)" />
+                          )}
+                        </div>
+                      )}
+                      <div className="message-content">
+                        {msg.displayImage && (
+                          <div style={{ marginBottom: '8px' }}>
+                            <img src={msg.displayImage} alt="Attached" style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px' }} />
+                          </div>
+                        )}
+                        {msg.role === 'user' ? (
+                          <div className="message-text-bubble">
+                            <HighlightText text={msg.content} query={chatSearchQuery} />
+                          </div>
+                        ) : (
+                          <div className="markdown-body">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                p: ({ children }) => <p>{ProcessChildren(children, chatSearchQuery)}</p>,
+                                li: ({ children }) => <li>{ProcessChildren(children, chatSearchQuery)}</li>,
+                                h1: ({ children }) => <h1>{ProcessChildren(children, chatSearchQuery)}</h1>,
+                                h2: ({ children }) => <h2>{ProcessChildren(children, chatSearchQuery)}</h2>,
+                                h3: ({ children }) => <h3>{ProcessChildren(children, chatSearchQuery)}</h3>,
+                                code({ node: _node, inline, className, children, ...props }) {
+                                  const match = /language-(\w+)/.exec(className || '');
+                                  const codeString = String(children).replace(/\n$/, '');
+                                  return !inline && match ? (
+                                    <CodeBlock language={match[1]} codeString={codeString} isDark={isDark} {...props} />
+                                  ) : (
+                                    <code className={className} {...props}>
+                                      <HighlightText text={String(children)} query={chatSearchQuery} />
+                                    </code>
+                                  )
+                                }
+                              }}
+                            >
+                              {msg.content}
+                            </ReactMarkdown>
+                            {isTyping && index === messages.length - 1 && (
+                              <span className="cursor-blink"></span>
+                            )}
+                            {!isTyping && msg.role === 'assistant' && (
+                              <MessageActions
+                                text={msg.content}
+                                onRegenerate={() => regenerateMessage(index)}
+                              />
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {msg.role === 'user' && (
+                        <MessageActions text={msg.content} showRegenerate={false} />
+                      )}
                     </div>
                   ))}
-                  {models.length === 0 && <span style={{color: 'var(--text-secondary)'}}>No models installed.</span>}
+                  <div ref={messagesEndRef} />
                 </div>
-              </div>
+              )}
+            </div>
 
-              <div className="settings-section">
-                <h3>Hardware & System Information</h3>
-                <div className="info-grid">
-                  <div className="info-item">
-                    <span className="info-label">Logical CPU Cores</span>
-                    <span className="info-value">{hardwareInfo.cpu}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">Estimated RAM</span>
-                    <span className="info-value">{hardwareInfo.ram}</span>
-                  </div>
-                  <div className="info-item" style={{ gridColumn: 'span 2' }}>
-                    <span className="info-label">Graphics (GPU)</span>
-                    <span className="info-value" style={{fontSize: '0.9rem'}}>{hardwareInfo.gpu}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">OS Platform</span>
-                    <span className="info-value">{hardwareInfo.os}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">Screen Resolution</span>
-                    <span className="info-value">{hardwareInfo.screen}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">Web Storage Quota</span>
-                    <span className="info-value">{hardwareInfo.storageTotal}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">Web Storage Used</span>
-                    <span className="info-value">{hardwareInfo.storageUsed}</span>
-                  </div>
-                  <div className="info-item" style={{ gridColumn: 'span 2' }}>
-                    <span className="info-label">Ollama Connection</span>
-                    <span className="info-value">http://127.0.0.1:11434</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <h3>Install New Models</h3>
-                <p className="settings-desc">
-                  Pull models directly from Ollama registry. Browse all at <a href="https://ollama.com/library" target="_blank" rel="noreferrer" style={{color: 'var(--accent-color)'}}>ollama.com/library</a>.
-                </p>
-                
-                <div className="pull-model-form">
-                  <input 
-                    type="text" 
-                    id="modelNameInput"
-                    placeholder="Enter model name (e.g. llama3)" 
-                    className="model-input"
-                  />
-                  <button 
-                    className="pull-btn"
-                    disabled={!!pullingModel}
-                    onClick={() => {
-                      const val = document.getElementById('modelNameInput').value;
-                      if(val) pullModel(val);
-                    }}
-                  >
-                    <Download size={16} /> Pull
-                  </button>
-                </div>
-
-                <div className="popular-models">
-                  {['llama3', 'mistral', 'phi3', 'gemma', 'qwen', 'mixtral', 'llava', 'codellama'].map(mName => (
-                    <button 
-                      key={mName} 
-                      className="popular-btn"
-                      disabled={!!pullingModel || models.includes(mName + ':latest')}
-                      onClick={() => pullModel(mName)}
+            <div className="input-area">
+              <div className="input-box" style={{ flexDirection: selectedImage ? 'column' : 'row', alignItems: selectedImage ? 'stretch' : 'flex-end' }}>
+                {selectedImage && (
+                  <div style={{ position: 'relative', alignSelf: 'flex-start', margin: '16px 0 0 16px' }}>
+                    <img src={selectedImage.dataUrl} alt="Preview" style={{ height: '60px', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
+                    <button
+                      onClick={() => setSelectedImage(null)}
+                      style={{ position: 'absolute', top: '-8px', right: '-8px', background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '50%', padding: '2px', cursor: 'pointer', color: 'var(--text-primary)', display: 'flex' }}
                     >
-                      {mName} {models.includes(mName + ':latest') && '(Installed)'}
+                      <X size={14} />
                     </button>
-                  ))}
-                </div>
-                
-                {pullProgress && (
-                  <div className="pull-progress" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>{pullProgress}</span>
-                    {pullingModel && (
-                      <button 
-                        onClick={stopPulling} 
-                        style={{ background: 'transparent', border: 'none', color: '#d93025', cursor: 'pointer', padding: '4px' }}
-                        title="Stop pulling"
-                      >
+                  </div>
+                )}
+                <div style={{ display: 'flex', width: '100%', alignItems: 'center', paddingTop: selectedImage ? '8px' : '0' }}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={fileInputRef}
+                    style={{ display: 'none' }}
+                    onChange={handleImageUpload}
+                  />
+                  <button className="icon-btn" title="Add image" onClick={() => fileInputRef.current?.click()}>
+                    <ImageIcon size={20} />
+                  </button>
+                  <textarea
+                    ref={textareaRef}
+                    className="input-field"
+                    placeholder="Enter a prompt here"
+                    value={input}
+                    onChange={handleInput}
+                    onKeyDown={handleKeyDown}
+                    rows={1}
+                  />
+                  <div className="input-actions">
+                    <button className="icon-btn" title="Use microphone">
+                      <Mic size={20} />
+                    </button>
+                    {isTyping ? (
+                      <button className="icon-btn stop-btn active" onClick={stopGeneration} title="Stop generating">
                         <Square fill="currentColor" size={16} />
+                      </button>
+                    ) : (
+                      <button
+                        className={`icon-btn send-btn ${input.trim() ? 'active' : ''}`}
+                        onClick={() => handleSubmit()}
+                        disabled={!input.trim() || !isModelValid}
+                      >
+                        <Send size={20} />
                       </button>
                     )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

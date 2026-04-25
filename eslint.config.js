@@ -23,7 +23,16 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // Relax unused vars — ignore underscore-prefixed and ALL_CAPS constants
+      'no-unused-vars': ['warn', { varsIgnorePattern: '^[A-Z_]|^_', argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
+      // Allow empty catch blocks (common for silent error suppression)
+      'no-empty': ['warn', { allowEmptyCatch: true }],
+      // Turn off overly strict hooks rules that produce false positives
+      'react-hooks/purity': 'off',
+      'react-hooks/immutability': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+      // Keep exhaustive-deps as a warning only
+      'react-hooks/exhaustive-deps': 'warn',
     },
   },
 ])

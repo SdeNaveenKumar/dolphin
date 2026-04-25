@@ -44,11 +44,15 @@ It grants you the premium, sleek experience of a top-tier commercial AI applicat
 ## ✨ Key Features
 
 - 🎨 **Premium UI/UX**: A gorgeous dark-mode interface meticulously designed to feel modern, sleek, and highly responsive.
-- 🌊 **Fluid UI Animations**: Features a unified, responsive brand header that seamlessly glides between the sidebar and the beautifully centered chat layout as you navigate.
-- 📸 **Multi-Modal Vision Support**: Attach and preview images directly in the composer to chat with vision models.
+- 🔍 **Advanced Chat Search**: Real-time, deep search across all conversations. Features precision regex highlighting, auto-navigation to matching chats, and automatic centering of matches in your viewport.
+- 👤 **Dynamic User Identity**: Deep personalization that integrates your name, role, and bio into the AI's core memory. Dolphin "remembers" your identity across every conversation for more relevant, personalized assistance.
+- 🌈 **Accent Color Engine**: Choose your signature look with a custom accent color picker that dynamically themes the entire application's highlights and accents.
+- 🌓 **Dynamic Theme Engine**: Seamless support for Light, Dark, and System (OS-matched) modes.
+- 🌊 **Fluid UI Animations**: Features a unified, responsive brand header that seamlessly glides between the sidebar and the beautifully centered chat layout.
+- 📸 **Multi-Modal Vision Support**: Attach and preview images directly in the composer to chat with vision models like *LLaVA*.
 - 🧠 **Built-in Model Manager**: Pull, track download progress, and delete Ollama models directly from the UI settings.
 - 💻 **IDE-Grade Code Blocks**: Beautiful syntax highlighting leveraging premium developer fonts, rounded UI cards, and instant "Copy Code" visual feedback.
-- 💾 **Persistent Memory**: All chat histories and active conversations are automatically saved locally and survive page refreshes.
+- 💾 **Persistent Memory**: All chat histories and settings are automatically saved locally and survive page refreshes.
 - 📊 **Hardware Diagnostics**: Real-time system monitoring panel displaying your active CPU cores, RAM estimation, and GPU context.
 - 📱 **Progressive Web App (PWA)**: Fully responsive and natively installable as an app on your mobile device or desktop for offline usage.
 - 📜 **Smart Auto-Scroll**: Intelligent scroll locking ensures you can freely scroll up to read past messages without the live LLM stream forcing you back to the bottom.
