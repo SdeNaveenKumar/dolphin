@@ -6,8 +6,9 @@ import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/
 import {
   Menu, Plus, MessageSquare, Settings, HelpCircle,
   Moon, Sun, Send, Image as ImageIcon, Mic, Sparkles, User, Bot, Square, Trash2, X, Download, RefreshCw, Copy, Check, ArrowLeft, Monitor, Search, ChevronUp, ChevronDown,
-  Cpu, Shield, ShieldCheck, Activity, Server
+  Cpu, Shield, ShieldCheck, Activity, Server, Folder, FolderOpen
 } from 'lucide-react';
+
 import './index.css';
 
 const ALL_SUGGESTIONS = [
@@ -49,7 +50,7 @@ const PERSONAS = [
   { id: 'default', name: 'General Assistant', icon: Bot, prompt: SYSTEM_PROMPT },
   { id: 'code', name: 'Code Architect', icon: Cpu, prompt: "Role: You are an expert Software Architect and Senior Developer. Provide high-quality, production-ready code with detailed explanations. Follow best practices and focus on performance and security." },
   { id: 'writer', name: 'Creative Writer', icon: Sparkles, prompt: "Role: You are a creative writer and storyteller. Use rich language, metaphors, and focus on engaging narrative and emotional resonance." },
-  { id: 'tutor', name: 'Academic Tutor', icon: HelpCircle, prompt: "Role: You are a patient and knowledgeable tutor. Explain concepts clearly, using analogies, and check for understanding at each step." },
+  { id: 'tutor', name: 'Academic Tutor', icon: Monitor, prompt: "Role: You are a patient and knowledgeable tutor. Explain concepts clearly, using analogies, and check for understanding at each step." },
   { id: 'executive', name: 'Executive Suite', icon: ShieldCheck, prompt: "Role: You are a high-level executive assistant. Provide concise, actionable summaries, bulleted takeaways, and clear next steps. Focus on efficiency." }
 ];
 
@@ -75,7 +76,7 @@ const CodeBlock = ({ language, codeString, isDark, ...props }) => {
   const handlePreview = () => {
     const previewWindow = window.open('', '_blank');
     let content = codeString;
-    
+
     if (language === 'html' || !language) {
       // Direct HTML
     } else if (language === 'css') {
@@ -225,9 +226,9 @@ const MessageActions = ({ text, onRegenerate, onReact, onEdit, reactions = [], s
     <div className="message-actions">
       {isEditing ? (
         <div className="edit-message-container">
-          <textarea 
-            className="edit-message-input" 
-            value={editValue} 
+          <textarea
+            className="edit-message-input"
+            value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             rows={Math.max(2, editValue.split('\n').length)}
           />
@@ -251,9 +252,9 @@ const MessageActions = ({ text, onRegenerate, onReact, onEdit, reactions = [], s
                 <Plus size={14} style={{ transform: 'rotate(45deg)' }} />
               </button>
             )}
-            <button 
-              className={`icon-btn ${isSpeaking ? 'active-accent' : ''}`} 
-              onClick={handleSpeak} 
+            <button
+              className={`icon-btn ${isSpeaking ? 'active-accent' : ''}`}
+              onClick={handleSpeak}
               title={isSpeaking ? "Stop reading" : "Read aloud"}
             >
               {isSpeaking ? <Bot size={16} className="spin" /> : <Mic size={16} />}
@@ -261,33 +262,33 @@ const MessageActions = ({ text, onRegenerate, onReact, onEdit, reactions = [], s
             <div className="reaction-picker-container">
 
 
-          <button className="icon-btn" onClick={() => setShowPicker(!showPicker)} title="Add reaction">
-            <Plus size={14} />
-          </button>
-          {showPicker && (
-            <div className="emoji-picker">
-              {emojiList.map(emoji => (
-                <button 
-                  key={emoji} 
-                  className="emoji-btn" 
-                  onClick={() => { onReact(emoji); setShowPicker(false); }}
-                >
-                  {emoji}
-                </button>
-              ))}
+              <button className="icon-btn" onClick={() => setShowPicker(!showPicker)} title="Add reaction">
+                <Plus size={14} />
+              </button>
+              {showPicker && (
+                <div className="emoji-picker">
+                  {emojiList.map(emoji => (
+                    <button
+                      key={emoji}
+                      className="emoji-btn"
+                      onClick={() => { onReact(emoji); setShowPicker(false); }}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        <button className={`icon-btn ${copied ? 'copied' : ''}`} title="Copy text" onClick={handleCopy}>
-          {copied ? <Check size={16} color="#4ade80" /> : <Copy size={16} />}
-        </button>
-        {showRegenerate && onRegenerate && (
-          <button className="icon-btn" title="Regenerate" onClick={onRegenerate}>
-            <RefreshCw size={16} />
-          </button>
-        )}
-      </div>
-      </>
+            <button className={`icon-btn ${copied ? 'copied' : ''}`} title="Copy text" onClick={handleCopy}>
+              {copied ? <Check size={16} color="#4ade80" /> : <Copy size={16} />}
+            </button>
+            {showRegenerate && onRegenerate && (
+              <button className="icon-btn" title="Regenerate" onClick={onRegenerate}>
+                <RefreshCw size={16} />
+              </button>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -367,31 +368,90 @@ function App() {
   const [isRefreshingSuggestions, setIsRefreshingSuggestions] = useState(false);
   const [suggestionsHistory, setSuggestionsHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
-  
+
   // Phase 1 States
   const [currentPersonaId, setCurrentPersonaId] = useState(() => localStorage.getItem('dolphin_current_persona') || 'default');
   const [isPersonaDropdownOpen, setIsPersonaDropdownOpen] = useState(false);
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [isRefreshingModels, setIsRefreshingModels] = useState(false);
   const [isListening, setIsListening] = useState(false);
 
   const [attachedFiles, setAttachedFiles] = useState([]);
-  
+
+  const getChatGroups = () => {
+    const now = new Date();
+    const groups = {
+      Today: [],
+      Yesterday: [],
+      'Last 7 Days': [],
+      'Last 30 Days': [],
+      Older: []
+    };
+
+    const uncategorizedChats = chats.filter(c => {
+      const isInFolder = folders.some(f => f.chatIds.includes(c.id));
+      return !isInFolder;
+    });
+
+    uncategorizedChats.forEach(chat => {
+      const chatDate = new Date(parseInt(chat.id)); // Assuming id is timestamp
+      const diffDays = Math.floor((now - chatDate) / (1000 * 60 * 60 * 24));
+
+      if (diffDays === 0) groups.Today.push(chat);
+      else if (diffDays === 1) groups.Yesterday.push(chat);
+      else if (diffDays < 7) groups['Last 7 Days'].push(chat);
+      else if (diffDays < 30) groups['Last 30 Days'].push(chat);
+      else groups.Older.push(chat);
+    });
+
+    return Object.entries(groups).filter(([_, items]) => items.length > 0);
+  };
+
+
   // Phase 4 States
   const [folders, setFolders] = useState(() => {
     const saved = localStorage.getItem('dolphin_folders');
     return saved ? JSON.parse(saved) : [];
   });
-  const [activeFolderId, setActiveFolderId] = useState(null);
+  const [expandedFolderIds, setExpandedFolderIds] = useState([]);
+  const [pendingFolderId, setPendingFolderId] = useState(null);
+
+
 
   useEffect(() => {
     localStorage.setItem('dolphin_folders', JSON.stringify(folders));
   }, [folders]);
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      // If we clicked outside any selector wrapper, close both
+      if (!event.target.closest('.persona-selector-wrapper')) {
+        setIsModelDropdownOpen(false);
+        setIsPersonaDropdownOpen(false);
+      }
+    };
+
+    // Use capture phase (true) so we catch the click before any stopPropagation() in children
+    if (isModelDropdownOpen || isPersonaDropdownOpen) {
+      document.addEventListener('click', handleClickOutside, true);
+    }
+    return () => document.removeEventListener('click', handleClickOutside, true);
+  }, [isModelDropdownOpen, isPersonaDropdownOpen]);
+
   const createFolder = () => {
     const name = prompt("Enter folder name:");
     if (!name) return;
-    const newFolder = { id: Date.now().toString(), name, chatIds: [] };
+    const newFolder = {
+      id: Date.now().toString(),
+      name,
+      chatIds: [],
+      parentId: expandedFolderIds[expandedFolderIds.length - 1] || null // Nest under last expanded folder
+    };
+
     setFolders(prev => [...prev, newFolder]);
+
   };
+
 
   const moveChatToFolder = (chatId, folderId) => {
     setFolders(prev => prev.map(f => {
@@ -460,13 +520,13 @@ function App() {
         const newMessages = [...chat.messages];
         const msg = { ...newMessages[messageIndex] };
         const reactions = msg.reactions || [];
-        
+
         if (reactions.includes(emoji)) {
           msg.reactions = reactions.filter(r => r !== emoji);
         } else {
           msg.reactions = [...reactions, emoji];
         }
-        
+
         newMessages[messageIndex] = msg;
         return { ...chat, messages: newMessages };
       }
@@ -501,7 +561,7 @@ function App() {
       if (model && !['Detecting...', 'No model running', 'Ollama not running'].includes(model)) {
         const themes = ["productivity", "creative writing", "coding", "philosophy", "science", "daily life", "future tech", "humor", "learning"];
         const randomTheme = themes[Math.floor(Math.random() * themes.length)];
-        
+
         const response = await fetch('http://127.0.0.1:11434/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -567,7 +627,6 @@ function App() {
     if (assistantAvatar) localStorage.setItem('dolphin_assistant_avatar', assistantAvatar);
   }, [userName, userRole, userBio, userEmail, userAvatar, assistantAvatar]);
 
-  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [pullProgress, setPullProgress] = useState(null);
   // Intelligence & Settings States
   const [temperature, setTemperature] = useState(() => Number(localStorage.getItem('dolphin_temp')) || 0.7);
@@ -613,7 +672,7 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem('dolphin_accent_color', accentColor);
-    document.documentElement.style.setProperty('--accent-theme-color', accentColor);
+    document.documentElement.style.setProperty('--accent-color', accentColor);
     document.documentElement.style.setProperty('--accent-color-rgb', hexToRgb(accentColor));
   }, [accentColor]);
 
@@ -763,29 +822,31 @@ function App() {
 
   // Fetch models — defined before the useEffect that calls it
   const fetchModels = async () => {
+    setIsRefreshingModels(true);
     try {
-      const response = await fetch('http://127.0.0.1:11434/api/tags');
+      const response = await fetch("http://127.0.0.1:11434/api/tags");
       if (response.ok) {
         const data = await response.json();
         const modelNames = (data.models || []).map(m => m.name);
         setModels(modelNames);
-
         if (modelNames.length > 0) {
           const currentModel = modelRef.current;
-          if (currentModel === 'Detecting...' || !modelNames.includes(currentModel)) {
+          if (currentModel === "Detecting..." || !modelNames.includes(currentModel)) {
             setModel(modelNames[0]);
           }
         } else {
-          setModel('No model running');
+          setModel("No model running");
         }
       } else {
         setModels([]);
-        setModel('No model running');
+        setModel("No model running");
       }
     } catch (error) {
-      console.error('Error fetching models:', error);
+      console.error("Error fetching models:", error);
       setModels([]);
-      setModel('Ollama not running');
+      setModel("No model running");
+    } finally {
+      setTimeout(() => setIsRefreshingModels(false), 800);
     }
   };
 
@@ -820,10 +881,12 @@ function App() {
   const handleScroll = () => {
     if (chatContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-      setUserHasScrolledUp(!isNearBottom);
+      // Use a smaller threshold (30px) to make it easier to "break" out of auto-scroll
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 30;
+      setUserHasScrolledUp(!isAtBottom);
     }
   };
+
 
   const scrollToBottom = () => {
     if (!userHasScrolledUp) {
@@ -879,11 +942,18 @@ function App() {
     if (!activeChatId) {
       activeChatId = Date.now().toString();
       setCurrentChatId(activeChatId);
+
+      // Handle folder-aware creation
+      if (pendingFolderId) {
+        moveChatToFolder(activeChatId, pendingFolderId);
+        setPendingFolderId(null);
+      }
     }
+
 
     const currentMessages = overrideMessages !== null ? overrideMessages : messages;
     let finalInput = textToSubmit.trim();
-    
+
     if (attachedFiles.length > 0) {
       const fileContext = attachedFiles.map(f => `FILE: ${f.name}\nCONTENT: ${f.content}`).join('\n\n');
       finalInput = `Document Context:\n${fileContext}\n\nUser Question: ${finalInput}`;
@@ -905,6 +975,8 @@ function App() {
     setSelectedImage(null);
     setAttachedFiles([]);
     setIsTyping(true);
+    setUserHasScrolledUp(false);
+
 
 
     if (textareaRef.current) {
@@ -965,15 +1037,15 @@ function App() {
             if (data.message && data.message.content) {
               botContent += data.message.content;
               chunkCount++;
-              
+
               const elapsed = (Date.now() - startTime) / 1000;
               const tps = elapsed > 0 ? (chunkCount / elapsed).toFixed(1) : 0;
               const words = botContent.trim().split(/\s+/).length;
 
               setMessages(prev => {
                 const updated = [...prev];
-                updated[updated.length - 1] = { 
-                  role: 'assistant', 
+                updated[updated.length - 1] = {
+                  role: 'assistant',
                   content: botContent,
                   stats: { tps, words, time: elapsed.toFixed(1) }
                 };
@@ -1021,7 +1093,10 @@ function App() {
     setCurrentChatId(null);
     setMessages([]);
     setInput('');
+    setPendingFolderId(expandedFolderIds[expandedFolderIds.length - 1] || null);
   };
+
+
 
   const deleteChat = (e, id) => {
     e.stopPropagation();
@@ -1218,84 +1293,158 @@ function App() {
         <div className="recent-chats">
           <div className="recent-chats-header">
             <div className="recent-chats-title">Recent</div>
-            <button className="icon-btn tiny-btn" onClick={createFolder} title="Create Folder">
+            <button className="icon-btn tiny-btn" onClick={createNewChat} title="New Chat (Auto-folder)">
               <Plus size={14} />
+            </button>
+            <button className="icon-btn tiny-btn" onClick={createFolder} title="Create Folder (Nested)">
+              <Folder size={14} />
             </button>
           </div>
 
-          {/* Folders */}
-          {folders.map(folder => (
-            <div key={folder.id} className="folder-container">
-              <div 
-                className={`sidebar-item folder-item ${activeFolderId === folder.id ? 'active' : ''}`}
-                onClick={() => setActiveFolderId(activeFolderId === folder.id ? null : folder.id)}
-              >
-                <Plus size={16} style={{ transform: activeFolderId === folder.id ? 'rotate(45deg)' : 'none' }} />
-                <span className="chat-title">{folder.name}</span>
-                <span className="folder-count">{folder.chatIds.length}</span>
-              </div>
-              
-              {activeFolderId === folder.id && (
-                <div className="folder-contents">
-                  {chats.filter(c => folder.chatIds.includes(c.id)).map(chat => (
-                    <div
-                      key={chat.id}
-                      className={`sidebar-item sub-item ${currentChatId === chat.id ? 'active' : ''}`}
-                      onClick={() => { setCurrentChatId(chat.id); setIsSettingsOpen(false); }}
-                    >
-                      <MessageSquare size={16} />
-                      <span className="chat-title">{chat.title}</span>
-                      <button className="delete-btn" onClick={(e) => moveChatToFolder(chat.id, null)}>
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+          {/* Recursive Sidebar Component */}
+          {(() => {
+            const visited = new Set();
+            const renderFolder = (folder, depth = 0) => {
+              // Safety checks
+              if (!folder || !folder.id || visited.has(folder.id) || depth > 10) return null;
+              visited.add(folder.id);
 
-          {/* Uncategorized Chats */}
-          {chats.filter(c => {
-            const query = chatSearchQuery.toLowerCase();
-            const isInFolder = folders.some(f => f.chatIds.includes(c.id));
-            if (isInFolder) return false;
-            
-            const titleMatch = (c.title || '').toLowerCase().includes(query);
-            const contentMatch = (c.messages || []).some(m => (m.content || '').toLowerCase().includes(query));
-            return titleMatch || contentMatch;
-          }).map(chat => (
-            <div
-              key={chat.id}
-              className={`sidebar-item ${currentChatId === chat.id ? 'active' : ''}`}
-              onClick={() => { setCurrentChatId(chat.id); setIsSettingsOpen(false); }}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                const folderId = e.target.closest('.folder-item')?.dataset.id;
-                if (folderId) moveChatToFolder(chat.id, folderId);
-              }}
-            >
-              <MessageSquare size={18} />
-              <span className="chat-title">
-                <HighlightText text={chat.title} query={chatSearchQuery} />
-              </span>
-              <div className="sidebar-item-actions">
-                <select 
-                  className="folder-move-select"
-                  onChange={(e) => moveChatToFolder(chat.id, e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  defaultValue=""
+              const isExpanded = expandedFolderIds.includes(folder.id);
+              const childFolders = folders.filter(f => f.parentId === folder.id);
+
+              const toggleFolder = (e) => {
+                e.stopPropagation();
+                setExpandedFolderIds(prev =>
+                  isExpanded
+                    ? prev.filter(id => id !== folder.id)
+                    : [...prev, folder.id]
+                );
+              };
+
+              const query = chatSearchQuery.toLowerCase();
+              const hasSearch = query.length > 0;
+
+              // Recursive check if this folder or any subfolder contains a match
+              const folderMatches = (f, matchVisited = new Set()) => {
+                if (!f || !f.id || matchVisited.has(f.id)) return false;
+                matchVisited.add(f.id);
+
+                const titleMatch = (f.name || '').toLowerCase().includes(query);
+                const hasMatchingChat = chats.filter(c => f.chatIds && f.chatIds.includes(c.id)).some(c =>
+                  (c.title || '').toLowerCase().includes(query) ||
+                  (c.messages || []).some(m => (m.content || '').toLowerCase().includes(query))
+                );
+                if (titleMatch || hasMatchingChat) return true;
+
+                const children = folders.filter(cf => cf.parentId === f.id);
+                return children.some(cf => folderMatches(cf, matchVisited));
+              };
+
+              const shouldBeVisible = !hasSearch || folderMatches(folder);
+              const isEffectivelyExpanded = isExpanded || (hasSearch && folderMatches(folder));
+
+              if (!shouldBeVisible) return null;
+
+
+              return (
+                <div key={folder.id} className="folder-container" style={{ marginLeft: depth > 0 ? '12px' : '0' }}>
+                  <div
+                    className={`sidebar-item folder-item ${isExpanded ? 'active' : ''}`}
+                    onClick={toggleFolder}
+                  >
+                    {isEffectivelyExpanded ? <FolderOpen size={18} /> : <Folder size={18} />}
+                    <span className="chat-title">
+                      <HighlightText text={folder.name} query={chatSearchQuery} />
+                    </span>
+                    <span className="folder-count">{(folder.chatIds?.length || 0) + childFolders.length}</span>
+                  </div>
+
+                  {isEffectivelyExpanded && (
+                    <div className="folder-contents">
+                      {/* Render Child Folders */}
+                      {childFolders.map(cf => renderFolder(cf, depth + 1))}
+
+                      {/* Render Folder Chats */}
+                      {chats.filter(c => {
+                        if (!folder.chatIds || !folder.chatIds.includes(c.id)) return false;
+                        if (!hasSearch) return true;
+
+                        const titleMatch = (c.title || '').toLowerCase().includes(query);
+                        const contentMatch = (c.messages || []).some(m => (m.content || '').toLowerCase().includes(query));
+                        return titleMatch || contentMatch;
+                      }).map(chat => (
+                        <div
+                          key={chat.id}
+                          className={`sidebar-item sub-item ${currentChatId === chat.id ? 'active' : ''}`}
+                          onClick={() => { setCurrentChatId(chat.id); setIsSettingsOpen(false); }}
+                        >
+                          <MessageSquare size={16} />
+                          <span className="chat-title">
+                            <HighlightText text={chat.title} query={chatSearchQuery} />
+                          </span>
+                          <div className="sidebar-item-actions">
+                            <button className="delete-btn" onClick={(e) => { e.stopPropagation(); moveChatToFolder(chat.id, null); }}>
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+
+            };
+
+            return folders.filter(f => !f.parentId).map(f => renderFolder(f));
+          })()}
+
+
+
+          {/* Uncategorized Chats Grouped by Date */}
+          {getChatGroups().map(([groupName, groupChats]) => (
+            <div key={groupName} className="chat-group">
+              <div className="group-title">{groupName}</div>
+              {groupChats.filter(c => {
+                const query = chatSearchQuery.toLowerCase();
+                const titleMatch = (c.title || '').toLowerCase().includes(query);
+                const contentMatch = (c.messages || []).some(m => (m.content || '').toLowerCase().includes(query));
+                return titleMatch || contentMatch;
+              }).map(chat => (
+                <div
+                  key={chat.id}
+                  className={`sidebar-item ${currentChatId === chat.id ? 'active' : ''}`}
+                  onClick={() => { setCurrentChatId(chat.id); setIsSettingsOpen(false); }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    const folderId = e.target.closest('.folder-item')?.dataset.id;
+                    if (folderId) moveChatToFolder(chat.id, folderId);
+                  }}
                 >
-                  <option value="" disabled>Move</option>
-                  {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                </select>
-                <button className="delete-btn" onClick={(e) => deleteChat(e, chat.id)}>
-                  <Trash2 size={16} />
-                </button>
-              </div>
+                  <MessageSquare size={18} />
+                  <span className="chat-title">
+                    <HighlightText text={chat.title} query={chatSearchQuery} />
+                  </span>
+                  <div className="sidebar-item-actions">
+                    <select
+                      className="folder-move-select"
+                      onChange={(e) => moveChatToFolder(chat.id, e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      defaultValue=""
+                    >
+                      <option value="" disabled>Move</option>
+                      {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    </select>
+                    <button className="delete-btn" onClick={(e) => deleteChat(e, chat.id)}>
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
         </div>
+
 
 
         <div className="sidebar-bottom">
@@ -1319,85 +1468,98 @@ function App() {
             <div className={`brand-spacer ${isSidebarCollapsed ? 'expanded' : 'collapsed'}`}></div>
           </div>
 
-            <div className="top-bar-center">
-              <div className="model-selector-group">
-                <div className="model-selector-wrapper">
-                  <div className="model-selector" onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}>
-                    <Bot size={14} className="model-icon-small" />
-                    <span className="model-name">{model}</span>
-                  </div>
-
-                  {isModelDropdownOpen && (
-                    <>
-                      <div className="dropdown-overlay" onClick={() => setIsModelDropdownOpen(false)}></div>
-                      <div className="model-dropdown-menu">
-                        <div className="dropdown-header">Select Model</div>
-                        <div className="dropdown-list">
-                          {models.length > 0 ? (
-                            models.map(m => (
-                              <div
-                                key={m}
-                                className={`dropdown-item ${m === model ? 'active' : ''}`}
-                                onClick={() => {
-                                  modelRef.current = m;
-                                  setModel(m);
-                                  setIsModelDropdownOpen(false);
-                                }}
-                              >
-                                <Sparkles size={14} className="item-icon" />
-                                <span className="item-name">{m}</span>
-                                {m === model && <Check size={14} className="active-check" />}
-                              </div>
-                            ))
-                          ) : (
-                            <div className="dropdown-no-models">No models installed</div>
-                          )}
-                        </div>
-                        <div className="dropdown-footer" onClick={() => { setIsSettingsOpen(true); setSettingsTab('models'); setIsModelDropdownOpen(false); }}>
-                          <Settings size={14} />
-                          <span>Manage Models</span>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-                <button className="icon-btn refresh-top-btn" onClick={fetchModels} title="Refresh models">
-                  <RefreshCw size={16} />
-                </button>
+          <div className="top-bar-center">
+            {/* Model Selector Pill */}
+            <div className="persona-selector-wrapper">
+              <div className="premium-pill" onClick={() => { setIsModelDropdownOpen(!isModelDropdownOpen); setIsPersonaDropdownOpen(false); }}>
+                <span className="persona-name small-text">{model}</span>
+                <ChevronDown size={12} style={{ opacity: 0.5 }} />
               </div>
 
-              <div className="persona-selector-wrapper">
-                <div className="persona-selector" onClick={() => setIsPersonaDropdownOpen(!isPersonaDropdownOpen)}>
-                  <activePersona.icon size={14} className="persona-icon-small" />
-                  <span className="persona-name">{activePersona.name}</span>
-                </div>
 
-                {isPersonaDropdownOpen && (
-                  <>
-                    <div className="dropdown-overlay" onClick={() => setIsPersonaDropdownOpen(false)}></div>
-                    <div className="persona-dropdown-menu">
-                      <div className="dropdown-header">AI Persona</div>
-                      <div className="dropdown-list">
-                        {PERSONAS.map(p => (
+              {isModelDropdownOpen && (
+                <>
+                  <div className="premium-dropdown">
+                    <div className="dropdown-list">
+                      {models.length > 0 ? (
+                        models.map(m => (
+                          <div
+                            key={m}
+                            className={`premium-dropdown-item ${m === model ? 'active' : ''}`}
+                            onClick={() => {
+                              modelRef.current = m;
+                              setModel(m);
+                              setIsModelDropdownOpen(false);
+                            }}
+                          >
+                            <span className="item-name small-text">{m}</span>
+                            {m === model && <Check size={14} className="active-check-premium" />}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="dropdown-no-models">No models installed</div>
+                      )}
+                    </div>
+                    <div className="dropdown-footer" onClick={() => { setIsSettingsOpen(true); setSettingsTab('models'); setIsModelDropdownOpen(false); }}>
+                      <Settings size={12} />
+                      <span className="small-text">Manage Models</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button 
+              className={`icon-btn refresh-top-btn ${isRefreshingModels ? 'refreshing' : ''}`} 
+              onClick={fetchModels} 
+              title="Refresh models"
+              disabled={isRefreshingModels}
+            >
+              <RefreshCw size={14} className={isRefreshingModels ? 'spin-animation' : ''} />
+            </button>
+
+            {/* Persona Selector Pill */}
+            <div className="persona-selector-wrapper">
+              <div className="premium-pill" onClick={() => { setIsPersonaDropdownOpen(!isPersonaDropdownOpen); setIsModelDropdownOpen(false); }}>
+                {(() => {
+                  const PersonaIcon = activePersona.icon;
+                  return <PersonaIcon size={14} className="persona-icon-small" />;
+                })()}
+                <span className="persona-name small-text">{activePersona.name}</span>
+                <ChevronDown size={12} style={{ opacity: 0.5 }} />
+              </div>
+
+
+              {isPersonaDropdownOpen && (
+                <>
+                  <div className="premium-dropdown">
+                    <div className="dropdown-list">
+                      {PERSONAS.map(p => {
+                        const ItemIcon = p.icon;
+                        return (
                           <div
                             key={p.id}
-                            className={`dropdown-item ${p.id === currentPersonaId ? 'active' : ''}`}
+                            className={`premium-dropdown-item ${p.id === currentPersonaId ? 'active' : ''}`}
                             onClick={() => {
                               setCurrentPersonaId(p.id);
                               setIsPersonaDropdownOpen(false);
                             }}
                           >
-                            <p.icon size={14} className="item-icon" />
-                            <span className="item-name">{p.name}</span>
-                            {p.id === currentPersonaId && <Check size={14} className="active-check" />}
+                            <ItemIcon size={12} className="item-icon" />
+                            <span className="item-name small-text">{p.name}</span>
+                            {p.id === currentPersonaId && <Check size={12} className="active-check" />}
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })}
+
                     </div>
-                  </>
-                )}
-              </div>
+                  </div>
+                </>
+              )}
             </div>
+          </div>
+
+
 
 
           <div className="top-bar-right">
@@ -1887,6 +2049,8 @@ function App() {
           <>
             <div className="chat-container" ref={chatContainerRef} onScroll={handleScroll}>
               {messages.length === 0 ? (
+
+
                 <div className="welcome-screen">
                   <div style={{ marginBottom: '1rem' }}>
                     <img src="/logo.jpg" alt="Dolphin Logo" className="logo-img" style={{ width: '64px', height: '64px' }} onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }} />
@@ -1902,7 +2066,7 @@ function App() {
                     {historyIndex > 0 && (
                       <button
                         onClick={goBackSuggestions}
-                         style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                        style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                         title="Previous suggestions"
                       >
                         <ArrowLeft size={16} />
@@ -2020,12 +2184,12 @@ function App() {
                         )}
                       </div>
                       {msg.role === 'user' && (
-                        <MessageActions 
-                          text={msg.content} 
+                        <MessageActions
+                          text={msg.content}
                           reactions={msg.reactions}
                           onReact={(emoji) => handleReaction(currentChatId, index, emoji)}
                           onEdit={(newVal) => handleMessageEdit(index, newVal)}
-                          showRegenerate={false} 
+                          showRegenerate={false}
                           showEdit={true}
                         />
                       )}
@@ -2077,8 +2241,8 @@ function App() {
                     rows={1}
                   />
                   <div className="input-actions">
-                    <button 
-                      className={`icon-btn mic-btn ${isListening ? 'active-recording' : ''}`} 
+                    <button
+                      className={`icon-btn mic-btn ${isListening ? 'active-recording' : ''}`}
                       title="Use microphone"
                       onClick={startListening}
                     >
