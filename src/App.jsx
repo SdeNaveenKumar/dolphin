@@ -45,6 +45,14 @@ Color Simulation: Since you output Markdown, use the "green" circle emoji 🟢 o
 
 Tone: Professional, clear, and supportive. Ensure the layout looks as good as the information it contains.`;
 
+const PERSONAS = [
+  { id: 'default', name: 'General Assistant', icon: Bot, prompt: SYSTEM_PROMPT },
+  { id: 'code', name: 'Code Architect', icon: Cpu, prompt: "Role: You are an expert Software Architect and Senior Developer. Provide high-quality, production-ready code with detailed explanations. Follow best practices and focus on performance and security." },
+  { id: 'writer', name: 'Creative Writer', icon: Sparkles, prompt: "Role: You are a creative writer and storyteller. Use rich language, metaphors, and focus on engaging narrative and emotional resonance." },
+  { id: 'tutor', name: 'Academic Tutor', icon: HelpCircle, prompt: "Role: You are a patient and knowledgeable tutor. Explain concepts clearly, using analogies, and check for understanding at each step." },
+  { id: 'executive', name: 'Executive Suite', icon: ShieldCheck, prompt: "Role: You are a high-level executive assistant. Provide concise, actionable summaries, bulleted takeaways, and clear next steps. Focus on efficiency." }
+];
+
 const CodeBlock = ({ language, codeString, isDark, ...props }) => {
   const [copied, setCopied] = useState(false);
 
@@ -64,14 +72,52 @@ const CodeBlock = ({ language, codeString, isDark, ...props }) => {
     document.body.removeChild(element);
   };
 
+  const handlePreview = () => {
+    const previewWindow = window.open('', '_blank');
+    let content = codeString;
+    
+    if (language === 'html' || !language) {
+      // Direct HTML
+    } else if (language === 'css') {
+      content = `<style>${codeString}</style><h1>CSS Preview</h1><p>The styles have been applied.</p>`;
+    } else if (language === 'javascript' || language === 'js') {
+      content = `<h1>JavaScript Preview</h1><p>Check the console (F12) for output.</p><script>${codeString}<\/script>`;
+    } else {
+      content = `<h1>${language} Code</h1><pre>${codeString}</pre>`;
+    }
+
+    previewWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Dolphin Code Preview</title>
+          <style>
+            body { font-family: sans-serif; padding: 20px; background: #fff; color: #333; }
+            pre { background: #f4f4f4; padding: 15px; border-radius: 8px; overflow: auto; }
+          </style>
+        </head>
+        <body>${content}</body>
+      </html>
+    `);
+    previewWindow.document.close();
+  };
+
+  const showPreview = ['html', 'css', 'javascript', 'js'].includes(language?.toLowerCase());
+
   return (
     <div className={`code-block-container ${isDark ? 'dark-code' : 'light-code'}`}>
       <div className="code-block-header">
         <span className="code-lang">{language || 'text'}</span>
         <div className="code-header-actions">
+          {showPreview && (
+            <button onClick={handlePreview} className="code-block-action-btn" title="Live Preview">
+              <Sparkles size={14} />
+            </button>
+          )}
           <button onClick={handleDownload} className="code-block-action-btn" title="Download">
             <Download size={14} />
           </button>
+
           <button
             onClick={handleCopy}
             className={`code-block-action-btn ${copied ? 'copied' : ''}`}
@@ -140,8 +186,12 @@ const ProcessChildren = (children, query) => {
   });
 };
 
-const MessageActions = ({ text, onRegenerate, showRegenerate = true }) => {
+const MessageActions = ({ text, onRegenerate, onReact, onEdit, reactions = [], showRegenerate = true, showEdit = false }) => {
   const [copied, setCopied] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(text);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(text);
@@ -149,19 +199,98 @@ const MessageActions = ({ text, onRegenerate, showRegenerate = true }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleSaveEdit = () => {
+    onEdit(editValue);
+    setIsEditing(false);
+  };
+
+
+  const handleSpeak = () => {
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const emojiList = ['👍', '❤️', '🔥', '👏', '💡', '🤔', '🚀'];
+
   return (
     <div className="message-actions">
-      <button className={`icon-btn ${copied ? 'copied' : ''}`} title="Copy text" onClick={handleCopy}>
-        {copied ? <Check size={16} color="#4ade80" /> : <Copy size={16} />}
-      </button>
-      {showRegenerate && onRegenerate && (
-        <button className="icon-btn" title="Regenerate" onClick={onRegenerate}>
-          <RefreshCw size={16} />
+      {isEditing ? (
+        <div className="edit-message-container">
+          <textarea 
+            className="edit-message-input" 
+            value={editValue} 
+            onChange={(e) => setEditValue(e.target.value)}
+            rows={Math.max(2, editValue.split('\n').length)}
+          />
+          <div className="edit-actions">
+            <button className="save-btn" onClick={handleSaveEdit}>Save & Submit</button>
+            <button className="cancel-btn" onClick={() => setIsEditing(false)}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="reactions-display">
+            {reactions.map((r, i) => (
+              <span key={i} className="reaction-badge" title="Remove reaction" onClick={() => onReact(r)}>
+                {r}
+              </span>
+            ))}
+          </div>
+          <div className="action-buttons-group">
+            {showEdit && (
+              <button className="icon-btn" onClick={() => setIsEditing(true)} title="Edit message">
+                <Plus size={14} style={{ transform: 'rotate(45deg)' }} />
+              </button>
+            )}
+            <button 
+              className={`icon-btn ${isSpeaking ? 'active-accent' : ''}`} 
+              onClick={handleSpeak} 
+              title={isSpeaking ? "Stop reading" : "Read aloud"}
+            >
+              {isSpeaking ? <Bot size={16} className="spin" /> : <Mic size={16} />}
+            </button>
+            <div className="reaction-picker-container">
+
+
+          <button className="icon-btn" onClick={() => setShowPicker(!showPicker)} title="Add reaction">
+            <Plus size={14} />
+          </button>
+          {showPicker && (
+            <div className="emoji-picker">
+              {emojiList.map(emoji => (
+                <button 
+                  key={emoji} 
+                  className="emoji-btn" 
+                  onClick={() => { onReact(emoji); setShowPicker(false); }}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button className={`icon-btn ${copied ? 'copied' : ''}`} title="Copy text" onClick={handleCopy}>
+          {copied ? <Check size={16} color="#4ade80" /> : <Copy size={16} />}
         </button>
-      )}
+        {showRegenerate && onRegenerate && (
+          <button className="icon-btn" title="Regenerate" onClick={onRegenerate}>
+            <RefreshCw size={16} />
+          </button>
+        )}
+      </div>
     </div>
   );
 };
+
 
 function App() {
   const [themeMode, setThemeMode] = useState(() => localStorage.getItem('dolphin_theme_mode') || 'system');
@@ -235,6 +364,113 @@ function App() {
   const [isRefreshingSuggestions, setIsRefreshingSuggestions] = useState(false);
   const [suggestionsHistory, setSuggestionsHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  
+  // Phase 1 States
+  const [currentPersonaId, setCurrentPersonaId] = useState(() => localStorage.getItem('dolphin_current_persona') || 'default');
+  const [isPersonaDropdownOpen, setIsPersonaDropdownOpen] = useState(false);
+  const [generationStats, setGenerationStats] = useState({ tps: 0, words: 0, time: 0 });
+  const [isListening, setIsListening] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState([]);
+  
+  // Phase 4 States
+  const [folders, setFolders] = useState(() => {
+    const saved = localStorage.getItem('dolphin_folders');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [activeFolderId, setActiveFolderId] = useState(null);
+
+  useEffect(() => {
+    localStorage.setItem('dolphin_folders', JSON.stringify(folders));
+  }, [folders]);
+
+  const createFolder = () => {
+    const name = prompt("Enter folder name:");
+    if (!name) return;
+    const newFolder = { id: Date.now().toString(), name, chatIds: [] };
+    setFolders(prev => [...prev, newFolder]);
+  };
+
+  const moveChatToFolder = (chatId, folderId) => {
+    setFolders(prev => prev.map(f => {
+      // Remove from all folders first
+      const updatedChatIds = f.chatIds.filter(id => id !== chatId);
+      // Add to target folder
+      if (f.id === folderId) {
+        return { ...f, chatIds: [...updatedChatIds, chatId] };
+      }
+      return { ...f, chatIds: updatedChatIds };
+    }));
+  };
+
+
+  const exportChat = () => {
+    if (!messages.length) return;
+    const content = messages.map(m => `**${m.role.toUpperCase()}**: ${m.content}`).join('\n\n---\n\n');
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dolphin-chat-${Date.now()}.md`;
+    a.click();
+  };
+
+  const handleMessageEdit = (index, newContent) => {
+    const updatedMessages = messages.slice(0, index);
+    handleSubmit(newContent, updatedMessages);
+  };
+
+
+  const startListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Your browser does not support Speech Recognition.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setInput(prev => prev + (prev ? ' ' : '') + transcript);
+    };
+
+    recognition.start();
+  };
+
+
+  useEffect(() => {
+    localStorage.setItem('dolphin_current_persona', currentPersonaId);
+  }, [currentPersonaId]);
+
+  const activePersona = PERSONAS.find(p => p.id === currentPersonaId) || PERSONAS[0];
+
+  const handleReaction = (chatId, messageIndex, emoji) => {
+    setChats(prev => prev.map(chat => {
+      if (chat.id === chatId) {
+        const newMessages = [...chat.messages];
+        const msg = { ...newMessages[messageIndex] };
+        const reactions = msg.reactions || [];
+        
+        if (reactions.includes(emoji)) {
+          msg.reactions = reactions.filter(r => r !== emoji);
+        } else {
+          msg.reactions = [...reactions, emoji];
+        }
+        
+        newMessages[messageIndex] = msg;
+        return { ...chat, messages: newMessages };
+      }
+      return chat;
+    }));
+  };
+
 
   const goBackSuggestions = () => {
     if (historyIndex > 0) {
@@ -426,19 +662,28 @@ function App() {
 
   const isModelValid = model && !['Detecting...', 'No model running', 'Ollama not running'].includes(model);
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target.result;
-      const base64 = dataUrl.split(',')[1];
-      setSelectedImage({ dataUrl, base64 });
-    };
-    reader.readAsDataURL(file);
+  const handleFileUpload = (e) => {
+    const files = Array.from(e.target.files);
+    files.forEach(file => {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const dataUrl = event.target.result;
+          const base64 = dataUrl.split(',')[1];
+          setSelectedImage({ dataUrl, base64 });
+        };
+        reader.readAsDataURL(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setAttachedFiles(prev => [...prev, { name: file.name, content: event.target.result }]);
+        };
+        reader.readAsText(file);
+      }
+    });
     e.target.value = null; // reset
   };
+
 
   const MODEL_SIZES = {
     'llama3': '~4.7 GB',
@@ -634,7 +879,15 @@ function App() {
     }
 
     const currentMessages = overrideMessages !== null ? overrideMessages : messages;
-    const userMessage = { role: 'user', content: textToSubmit.trim() };
+    let finalInput = textToSubmit.trim();
+    
+    if (attachedFiles.length > 0) {
+      const fileContext = attachedFiles.map(f => `FILE: ${f.name}\nCONTENT: ${f.content}`).join('\n\n');
+      finalInput = `Document Context:\n${fileContext}\n\nUser Question: ${finalInput}`;
+    }
+
+    const userMessage = { role: 'user', content: overrideInput !== null ? overrideInput : input.trim() };
+
 
     if (selectedImage && overrideMessages === null) {
       userMessage.images = [selectedImage.base64];
@@ -647,7 +900,9 @@ function App() {
 
     setInput('');
     setSelectedImage(null);
+    setAttachedFiles([]);
     setIsTyping(true);
+
 
     if (textareaRef.current) {
       textareaRef.current.style.height = '44px';
@@ -656,9 +911,10 @@ function App() {
     abortControllerRef.current = new AbortController();
 
     try {
-      const dynamicSystemPrompt = `${SYSTEM_PROMPT}\n\nUser Context:\n- Name: ${userName}\n- Role: ${userRole}\n- Bio: ${userBio}`;
+      const dynamicSystemPrompt = `${activePersona.prompt}\n\nUser Context:\n- Name: ${userName}\n- Role: ${userRole}\n- Bio: ${userBio}`;
       const apiMessages = [
         { role: 'system', content: dynamicSystemPrompt },
+
         ...newMessagesContext.map(msg => {
           const out = { role: msg.role, content: msg.content };
           if (msg.images) {
@@ -684,9 +940,11 @@ function App() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let botContent = '';
+      let startTime = Date.now();
+      let chunkCount = 0;
 
       setMessages(prev => {
-        const appended = [...prev, { role: 'assistant', content: '' }];
+        const appended = [...prev, { role: 'assistant', content: '', stats: { tps: 0, words: 0 } }];
         saveMessageToChat(activeChatId, appended);
         return appended;
       });
@@ -703,18 +961,31 @@ function App() {
             const data = JSON.parse(line);
             if (data.message && data.message.content) {
               botContent += data.message.content;
+              chunkCount++;
+              
+              const elapsed = (Date.now() - startTime) / 1000;
+              const tps = elapsed > 0 ? (chunkCount / elapsed).toFixed(1) : 0;
+              const words = botContent.trim().split(/\s+/).length;
+
               setMessages(prev => {
                 const updated = [...prev];
-                updated[updated.length - 1] = { role: 'assistant', content: botContent };
+                updated[updated.length - 1] = { 
+                  role: 'assistant', 
+                  content: botContent,
+                  stats: { tps, words, time: elapsed.toFixed(1) }
+                };
                 saveMessageToChat(activeChatId, updated);
                 return updated;
               });
+              
+              setGenerationStats({ tps, words, time: elapsed.toFixed(1) });
             }
           } catch (e) {
             console.error('Error parsing JSON:', e);
           }
         }
       }
+
     } catch (error) {
       if (error.name === 'AbortError') {
         console.log('Generation stopped by user');
@@ -943,9 +1214,51 @@ function App() {
         </div>
 
         <div className="recent-chats">
-          <div className="recent-chats-title">Recent</div>
+          <div className="recent-chats-header">
+            <div className="recent-chats-title">Recent</div>
+            <button className="icon-btn tiny-btn" onClick={createFolder} title="Create Folder">
+              <Plus size={14} />
+            </button>
+          </div>
+
+          {/* Folders */}
+          {folders.map(folder => (
+            <div key={folder.id} className="folder-container">
+              <div 
+                className={`sidebar-item folder-item ${activeFolderId === folder.id ? 'active' : ''}`}
+                onClick={() => setActiveFolderId(activeFolderId === folder.id ? null : folder.id)}
+              >
+                <Plus size={16} style={{ transform: activeFolderId === folder.id ? 'rotate(45deg)' : 'none' }} />
+                <span className="chat-title">{folder.name}</span>
+                <span className="folder-count">{folder.chatIds.length}</span>
+              </div>
+              
+              {activeFolderId === folder.id && (
+                <div className="folder-contents">
+                  {chats.filter(c => folder.chatIds.includes(c.id)).map(chat => (
+                    <div
+                      key={chat.id}
+                      className={`sidebar-item sub-item ${currentChatId === chat.id ? 'active' : ''}`}
+                      onClick={() => { setCurrentChatId(chat.id); setIsSettingsOpen(false); }}
+                    >
+                      <MessageSquare size={16} />
+                      <span className="chat-title">{chat.title}</span>
+                      <button className="delete-btn" onClick={(e) => moveChatToFolder(chat.id, null)}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Uncategorized Chats */}
           {chats.filter(c => {
             const query = chatSearchQuery.toLowerCase();
+            const isInFolder = folders.some(f => f.chatIds.includes(c.id));
+            if (isInFolder) return false;
+            
             const titleMatch = (c.title || '').toLowerCase().includes(query);
             const contentMatch = (c.messages || []).some(m => (m.content || '').toLowerCase().includes(query));
             return titleMatch || contentMatch;
@@ -954,17 +1267,34 @@ function App() {
               key={chat.id}
               className={`sidebar-item ${currentChatId === chat.id ? 'active' : ''}`}
               onClick={() => { setCurrentChatId(chat.id); setIsSettingsOpen(false); }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                const folderId = e.target.closest('.folder-item')?.dataset.id;
+                if (folderId) moveChatToFolder(chat.id, folderId);
+              }}
             >
               <MessageSquare size={18} />
               <span className="chat-title">
                 <HighlightText text={chat.title} query={chatSearchQuery} />
               </span>
-              <button className="delete-btn" onClick={(e) => deleteChat(e, chat.id)}>
-                <Trash2 size={16} />
-              </button>
+              <div className="sidebar-item-actions">
+                <select 
+                  className="folder-move-select"
+                  onChange={(e) => moveChatToFolder(chat.id, e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  defaultValue=""
+                >
+                  <option value="" disabled>Move</option>
+                  {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+                <button className="delete-btn" onClick={(e) => deleteChat(e, chat.id)}>
+                  <Trash2 size={16} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
+
 
         <div className="sidebar-bottom">
           <div className={`sidebar-item ${isSettingsOpen ? 'active' : ''}`} onClick={() => setIsSettingsOpen(!isSettingsOpen)}>
@@ -987,55 +1317,93 @@ function App() {
             <div className={`brand-spacer ${isSidebarCollapsed ? 'expanded' : 'collapsed'}`}></div>
           </div>
 
-          {!isSettingsOpen && (
-            <div className="model-selector-group">
-              <div className="model-selector-wrapper">
-                <div className="model-selector" onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}>
-                  <span className="model-name">{model}</span>
+            <div className="top-bar-center">
+              <div className="model-selector-group">
+                <div className="model-selector-wrapper">
+                  <div className="model-selector" onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}>
+                    <Bot size={14} className="model-icon-small" />
+                    <span className="model-name">{model}</span>
+                  </div>
+
+                  {isModelDropdownOpen && (
+                    <>
+                      <div className="dropdown-overlay" onClick={() => setIsModelDropdownOpen(false)}></div>
+                      <div className="model-dropdown-menu">
+                        <div className="dropdown-header">Select Model</div>
+                        <div className="dropdown-list">
+                          {models.length > 0 ? (
+                            models.map(m => (
+                              <div
+                                key={m}
+                                className={`dropdown-item ${m === model ? 'active' : ''}`}
+                                onClick={() => {
+                                  modelRef.current = m;
+                                  setModel(m);
+                                  setIsModelDropdownOpen(false);
+                                }}
+                              >
+                                <Sparkles size={14} className="item-icon" />
+                                <span className="item-name">{m}</span>
+                                {m === model && <Check size={14} className="active-check" />}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="dropdown-no-models">No models installed</div>
+                          )}
+                        </div>
+                        <div className="dropdown-footer" onClick={() => { setIsSettingsOpen(true); setSettingsTab('models'); setIsModelDropdownOpen(false); }}>
+                          <Settings size={14} />
+                          <span>Manage Models</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <button className="icon-btn refresh-top-btn" onClick={fetchModels} title="Refresh models">
+                  <RefreshCw size={16} />
+                </button>
+              </div>
+
+              <div className="persona-selector-wrapper">
+                <div className="persona-selector" onClick={() => setIsPersonaDropdownOpen(!isPersonaDropdownOpen)}>
+                  <activePersona.icon size={14} className="persona-icon-small" />
+                  <span className="persona-name">{activePersona.name}</span>
                 </div>
 
-                {isModelDropdownOpen && (
+                {isPersonaDropdownOpen && (
                   <>
-                    <div className="dropdown-overlay" onClick={() => setIsModelDropdownOpen(false)}></div>
-                    <div className="model-dropdown-menu">
-                      <div className="dropdown-header">Select Model</div>
+                    <div className="dropdown-overlay" onClick={() => setIsPersonaDropdownOpen(false)}></div>
+                    <div className="persona-dropdown-menu">
+                      <div className="dropdown-header">AI Persona</div>
                       <div className="dropdown-list">
-                        {models.length > 0 ? (
-                          models.map(m => (
-                            <div
-                              key={m}
-                              className={`dropdown-item ${m === model ? 'active' : ''}`}
-                              onClick={() => {
-                                modelRef.current = m;
-                                setModel(m);
-                                setIsModelDropdownOpen(false);
-                              }}
-                            >
-                              <Sparkles size={14} className="item-icon" />
-                              <span className="item-name">{m}</span>
-                              {m === model && <Check size={14} className="active-check" />}
-                            </div>
-                          ))
-                        ) : (
-                          <div className="dropdown-no-models">No models installed</div>
-                        )}
-                      </div>
-                      <div className="dropdown-footer" onClick={() => { setIsSettingsOpen(true); setSettingsTab('models'); setIsModelDropdownOpen(false); }}>
-                        <Settings size={14} />
-                        <span>Manage Models</span>
+                        {PERSONAS.map(p => (
+                          <div
+                            key={p.id}
+                            className={`dropdown-item ${p.id === currentPersonaId ? 'active' : ''}`}
+                            onClick={() => {
+                              setCurrentPersonaId(p.id);
+                              setIsPersonaDropdownOpen(false);
+                            }}
+                          >
+                            <p.icon size={14} className="item-icon" />
+                            <span className="item-name">{p.name}</span>
+                            {p.id === currentPersonaId && <Check size={14} className="active-check" />}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </>
                 )}
               </div>
-              <button className="icon-btn refresh-top-btn" onClick={fetchModels} title="Refresh models">
-                <RefreshCw size={16} />
-              </button>
             </div>
-          )}
+
 
           <div className="top-bar-right">
+            <button className="icon-btn" onClick={exportChat} title="Export chat (Markdown)">
+              <Download size={20} />
+            </button>
             <button className="theme-toggle" onClick={() => {
+
               if (themeMode === 'light') setThemeMode('dark');
               else if (themeMode === 'dark') setThemeMode('system');
               else setThemeMode('light');
@@ -1624,17 +1992,40 @@ function App() {
                             {isTyping && index === messages.length - 1 && (
                               <span className="cursor-blink"></span>
                             )}
-                            {!isTyping && msg.role === 'assistant' && (
-                              <MessageActions
-                                text={msg.content}
-                                onRegenerate={() => regenerateMessage(index)}
-                              />
+                            {msg.role === 'assistant' && (
+                              <div className="message-footer">
+                                {msg.stats && msg.stats.tps > 0 && (
+                                  <div className="generation-stats" title="Performance metrics">
+                                    <Activity size={12} />
+                                    <span>{msg.stats.tps} t/s</span>
+                                    <span className="stats-divider">•</span>
+                                    <span>{msg.stats.words} words</span>
+                                    <span className="stats-divider">•</span>
+                                    <span>{msg.stats.time}s</span>
+                                  </div>
+                                )}
+                                <MessageActions
+                                  text={msg.content}
+                                  reactions={msg.reactions}
+                                  onReact={(emoji) => handleReaction(currentChatId, index, emoji)}
+                                  onRegenerate={() => regenerateMessage(index)}
+                                  showRegenerate={!isTyping}
+                                />
+                              </div>
                             )}
+
                           </div>
                         )}
                       </div>
                       {msg.role === 'user' && (
-                        <MessageActions text={msg.content} showRegenerate={false} />
+                        <MessageActions 
+                          text={msg.content} 
+                          reactions={msg.reactions}
+                          onReact={(emoji) => handleReaction(currentChatId, index, emoji)}
+                          onEdit={(newVal) => handleMessageEdit(index, newVal)}
+                          showRegenerate={false} 
+                          showEdit={true}
+                        />
                       )}
                     </div>
                   ))}
@@ -1644,29 +2035,36 @@ function App() {
             </div>
 
             <div className="input-area">
-              <div className="input-box" style={{ flexDirection: selectedImage ? 'column' : 'row', alignItems: selectedImage ? 'stretch' : 'flex-end' }}>
-                {selectedImage && (
-                  <div style={{ position: 'relative', alignSelf: 'flex-start', margin: '16px 0 0 16px' }}>
-                    <img src={selectedImage.dataUrl} alt="Preview" style={{ height: '60px', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
-                    <button
-                      onClick={() => setSelectedImage(null)}
-                      style={{ position: 'absolute', top: '-8px', right: '-8px', background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '50%', padding: '2px', cursor: 'pointer', color: 'var(--text-primary)', display: 'flex' }}
-                    >
-                      <X size={14} />
-                    </button>
+              <div className="input-box" style={{ flexDirection: (selectedImage || attachedFiles.length > 0) ? 'column' : 'row', alignItems: (selectedImage || attachedFiles.length > 0) ? 'stretch' : 'flex-end' }}>
+                {(selectedImage || attachedFiles.length > 0) && (
+                  <div className="attachments-preview">
+                    {selectedImage && (
+                      <div className="attachment-item">
+                        <img src={selectedImage.dataUrl} alt="Preview" />
+                        <button onClick={() => setSelectedImage(null)}><X size={12} /></button>
+                      </div>
+                    )}
+                    {attachedFiles.map((file, i) => (
+                      <div key={i} className="attachment-item doc-attachment">
+                        <MessageSquare size={14} />
+                        <span>{file.name}</span>
+                        <button onClick={() => setAttachedFiles(prev => prev.filter((_, idx) => idx !== i))}><X size={12} /></button>
+                      </div>
+                    ))}
                   </div>
                 )}
-                <div style={{ display: 'flex', width: '100%', alignItems: 'center', paddingTop: selectedImage ? '8px' : '0' }}>
+                <div style={{ display: 'flex', width: '100%', alignItems: 'center', paddingTop: (selectedImage || attachedFiles.length > 0) ? '8px' : '0' }}>
                   <input
                     type="file"
-                    accept="image/*"
+                    multiple
                     ref={fileInputRef}
                     style={{ display: 'none' }}
-                    onChange={handleImageUpload}
+                    onChange={handleFileUpload}
                   />
-                  <button className="icon-btn" title="Add image" onClick={() => fileInputRef.current?.click()}>
-                    <ImageIcon size={20} />
+                  <button className="icon-btn" title="Add files or images" onClick={() => fileInputRef.current?.click()}>
+                    <Plus size={20} />
                   </button>
+
                   <textarea
                     ref={textareaRef}
                     className="input-field"
@@ -1677,10 +2075,16 @@ function App() {
                     rows={1}
                   />
                   <div className="input-actions">
-                    <button className="icon-btn" title="Use microphone">
+                    <button 
+                      className={`icon-btn mic-btn ${isListening ? 'active-recording' : ''}`} 
+                      title="Use microphone"
+                      onClick={startListening}
+                    >
                       <Mic size={20} />
+                      {isListening && <span className="mic-wave"></span>}
                     </button>
                     {isTyping ? (
+
                       <button className="icon-btn stop-btn active" onClick={stopGeneration} title="Stop generating">
                         <Square fill="currentColor" size={16} />
                       </button>
