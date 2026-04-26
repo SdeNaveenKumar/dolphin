@@ -5,7 +5,8 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
   Menu, Plus, MessageSquare, Settings, HelpCircle,
-  Moon, Sun, Send, Image as ImageIcon, Mic, Sparkles, User, Bot, Square, Trash2, X, Download, RefreshCw, Copy, Check, ArrowLeft, Monitor, Search, ChevronUp, ChevronDown
+  Moon, Sun, Send, Image as ImageIcon, Mic, Sparkles, User, Bot, Square, Trash2, X, Download, RefreshCw, Copy, Check, ArrowLeft, Monitor, Search, ChevronUp, ChevronDown,
+  Cpu, Shield, ShieldCheck, Activity, Server
 } from 'lucide-react';
 import './index.css';
 
@@ -103,29 +104,30 @@ const CodeBlock = ({ language, codeString, isDark, ...props }) => {
 const HighlightText = ({ text, query }) => {
   const safeText = text ? String(text) : '';
   const searchTerm = query ? String(query).trim() : '';
-  
+
   if (!searchTerm || !safeText) return <span>{safeText}</span>;
-  
+
+  let parts = [];
   try {
     const escaped = searchTerm.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
     const regex = new RegExp(`(${escaped})`, 'gi');
-    const parts = safeText.split(regex);
-    
-    return (
-      <span>
-        {parts.map((part, i) => {
-          const isMatch = part.toLowerCase() === searchTerm.toLowerCase();
-          return isMatch ? (
-            <span key={i} className="search-highlight">{part}</span>
-          ) : (
-            <span key={i}>{part}</span>
-          );
-        })}
-      </span>
-    );
+    parts = safeText.split(regex);
   } catch (err) {
     return <span>{safeText}</span>;
   }
+
+  return (
+    <span>
+      {parts.map((part, i) => {
+        const isMatch = part.toLowerCase() === searchTerm.toLowerCase();
+        return isMatch ? (
+          <span key={i} className="search-highlight">{part}</span>
+        ) : (
+          <span key={i}>{part}</span>
+        );
+      })}
+    </span>
+  );
 };
 
 const ProcessChildren = (children, query) => {
@@ -163,6 +165,7 @@ const MessageActions = ({ text, onRegenerate, showRegenerate = true }) => {
 
 function App() {
   const [themeMode, setThemeMode] = useState(() => localStorage.getItem('dolphin_theme_mode') || 'system');
+  const [pullingModel, setPullingModel] = useState('');
   const [isDark, setIsDark] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -204,7 +207,15 @@ function App() {
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [searchMatchIndex, setSearchMatchIndex] = useState(0);
   const [totalMatches, setTotalMatches] = useState(0);
+  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
   const [input, setInput] = useState('');
+  const searchInputRef = useRef(null);
+
+  useEffect(() => {
+    if (isHeaderSearchActive && searchInputRef.current) {
+      setTimeout(() => searchInputRef.current.focus(), 50);
+    }
+  }, [isHeaderSearchActive]);
 
   useEffect(() => {
     setSearchMatchIndex(0);
@@ -221,10 +232,77 @@ function App() {
   }, [model]);
 
   const [randomSuggestions, setRandomSuggestions] = useState([]);
+  const [isRefreshingSuggestions, setIsRefreshingSuggestions] = useState(false);
+  const [suggestionsHistory, setSuggestionsHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
-  const refreshSuggestions = () => {
+  const goBackSuggestions = () => {
+    if (historyIndex > 0) {
+      const prevIndex = historyIndex - 1;
+      setHistoryIndex(prevIndex);
+      setRandomSuggestions(suggestionsHistory[prevIndex]);
+    }
+  };
+
+
+
+  // Helper to add history and update state
+  const updateSuggestions = (newSugg) => {
+    setRandomSuggestions(newSugg);
+    setSuggestionsHistory(prev => [...prev, newSugg]);
+    setHistoryIndex(prev => prev + 1);
+  };
+
+  // Refined refreshSuggestions to use helper
+  const refreshSuggestions = async () => {
+    if (isRefreshingSuggestions) return;
+    setIsRefreshingSuggestions(true);
+
+    try {
+      if (model && !['Detecting...', 'No model running', 'Ollama not running'].includes(model)) {
+        const themes = ["productivity", "creative writing", "coding", "philosophy", "science", "daily life", "future tech", "humor", "learning"];
+        const randomTheme = themes[Math.floor(Math.random() * themes.length)];
+        
+        const response = await fetch('http://127.0.0.1:11434/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: model,
+            prompt: `Generate 3 unique, creative, and very short (max 12 words) conversation starters or tasks for an AI assistant. Focus on the theme: ${randomTheme}. Avoid repeats. Return ONLY a JSON array of 3 strings.`,
+            stream: false,
+            format: 'json',
+            options: {
+              temperature: 0.9,
+              top_p: 0.95
+            }
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          let suggestions;
+          try { suggestions = JSON.parse(data.response); } catch (e) { suggestions = data.response; }
+
+          if (Array.isArray(suggestions) && suggestions.length >= 3) {
+            const icons = [Sparkles, MessageSquare, Bot, HelpCircle];
+            const formatted = suggestions.slice(0, 3).map(text => ({
+              text: typeof text === 'string' ? text : text.text || "New Suggestion",
+              icon: icons[Math.floor(Math.random() * icons.length)]
+            }));
+            updateSuggestions(formatted);
+            setIsRefreshingSuggestions(false);
+            return;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error generating suggestions:', error);
+    }
+
     const shuffled = [...ALL_SUGGESTIONS].sort(() => 0.5 - Math.random());
-    setRandomSuggestions(shuffled.slice(0, 3));
+    const final = shuffled.slice(0, 3);
+    updateSuggestions(final);
+    setIsRefreshingSuggestions(false);
   };
 
   useEffect(() => {
@@ -239,6 +317,7 @@ function App() {
   const [userBio, setUserBio] = useState(() => localStorage.getItem('dolphin_user_bio') || 'Passionate about exploring the frontiers of artificial intelligence.');
   const [userEmail, setUserEmail] = useState(() => localStorage.getItem('dolphin_user_email') || 'user@example.com');
   const [userAvatar, setUserAvatar] = useState(() => localStorage.getItem('dolphin_user_avatar') || null);
+  const [assistantAvatar, setAssistantAvatar] = useState(() => localStorage.getItem('dolphin_assistant_avatar') || null);
 
   useEffect(() => {
     localStorage.setItem('dolphin_user_name', userName);
@@ -246,12 +325,44 @@ function App() {
     localStorage.setItem('dolphin_user_bio', userBio);
     localStorage.setItem('dolphin_user_email', userEmail);
     if (userAvatar) localStorage.setItem('dolphin_user_avatar', userAvatar);
-  }, [userName, userRole, userBio, userEmail, userAvatar]);
+    if (assistantAvatar) localStorage.setItem('dolphin_assistant_avatar', assistantAvatar);
+  }, [userName, userRole, userBio, userEmail, userAvatar, assistantAvatar]);
 
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [pullProgress, setPullProgress] = useState(null);
-  const [pullingModel, setPullingModel] = useState('');
+  // Intelligence & Settings States
+  const [temperature, setTemperature] = useState(() => Number(localStorage.getItem('dolphin_temp')) || 0.7);
+  const [contextLimit, setContextLimit] = useState(() => Number(localStorage.getItem('dolphin_context')) || 2048);
+  const [ollamaVersion, setOllamaVersion] = useState('Checking...');
+  const [apiStatus, setApiStatus] = useState('checking'); // 'online', 'offline'
 
+  useEffect(() => {
+    localStorage.setItem('dolphin_temp', temperature);
+    localStorage.setItem('dolphin_context', contextLimit);
+  }, [temperature, contextLimit]);
+
+  useEffect(() => {
+    const checkSystem = async () => {
+      try {
+        const res = await fetch('http://localhost:11434/api/tags');
+        if (res.ok) {
+          setApiStatus('online');
+          // Ollama version isn't in /tags usually, but we can assume connection is good.
+          // For real version, we'd use /api/version if available.
+          const verRes = await fetch('http://localhost:11434/api/version');
+          if (verRes.ok) {
+            const verData = await verRes.json();
+            setOllamaVersion(verData.version);
+          }
+        } else {
+          setApiStatus('offline');
+        }
+      } catch (e) {
+        setApiStatus('offline');
+      }
+    };
+    checkSystem();
+  }, []);
   const [accentColor, setAccentColor] = useState(() => {
     return localStorage.getItem('dolphin_accent_color') || '#34a853';
   });
@@ -770,32 +881,63 @@ function App() {
           <span className="new-chat-text">New chat</span>
         </button>
 
-        <div className="sidebar-search-container">
+        <div className={`animated-search ${isSidebarCollapsed ? (isHeaderSearchActive ? 'search-header' : 'search-collapsed') : 'search-sidebar'}`} onClick={() => isSidebarCollapsed && !isHeaderSearchActive && setIsHeaderSearchActive(true)}>
           <Search size={16} className="search-icon-sidebar" />
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Search chats..."
             value={chatSearchQuery}
             onChange={(e) => setChatSearchQuery(e.target.value)}
             className="sidebar-search-input"
+            onFocus={() => isSidebarCollapsed && setIsHeaderSearchActive(true)}
           />
+          {isHeaderSearchActive && (
+            <button className="close-search-btn" onClick={(e) => { e.stopPropagation(); setIsHeaderSearchActive(false); setChatSearchQuery(''); }}>
+              <X size={14} />
+            </button>
+          )}
           {chatSearchQuery && totalMatches > 0 && (
             <div className="search-nav-controls">
               <span className="search-count">{searchMatchIndex + 1} / {totalMatches}</span>
               <button
                 className="search-nav-btn"
-                onClick={() => setSearchMatchIndex(prev => (prev - 1 + totalMatches) % totalMatches)}
+                onClick={(e) => { e.stopPropagation(); setSearchMatchIndex(prev => (prev - 1 + totalMatches) % totalMatches); }}
                 title="Previous match"
               >
                 <ChevronUp size={14} />
               </button>
               <button
                 className="search-nav-btn"
-                onClick={() => setSearchMatchIndex(prev => (prev + 1) % totalMatches)}
+                onClick={(e) => { e.stopPropagation(); setSearchMatchIndex(prev => (prev + 1) % totalMatches); }}
                 title="Next match"
               >
                 <ChevronDown size={14} />
               </button>
+            </div>
+          )}
+          {isHeaderSearchActive && chatSearchQuery && (
+            <div className="search-results-pills">
+              {chats.filter(c => {
+                const query = chatSearchQuery.toLowerCase();
+                return (c.title || '').toLowerCase().includes(query) ||
+                  (c.messages || []).some(m => (m.content || '').toLowerCase().includes(query));
+              }).slice(0, 5).map(chat => (
+                <div
+                  key={chat.id}
+                  className="search-result-pill"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrentChatId(chat.id);
+                    // Search remains active and expanded as requested
+                  }}
+                >
+                  <MessageSquare size={14} />
+                  <span className="pill-text">
+                    <HighlightText text={chat.title} query={chatSearchQuery} />
+                  </span>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -878,7 +1020,7 @@ function App() {
                           <div className="dropdown-no-models">No models installed</div>
                         )}
                       </div>
-                      <div className="dropdown-footer" onClick={() => { setIsSettingsOpen(true); setIsModelDropdownOpen(false); }}>
+                      <div className="dropdown-footer" onClick={() => { setIsSettingsOpen(true); setSettingsTab('models'); setIsModelDropdownOpen(false); }}>
                         <Settings size={14} />
                         <span>Manage Models</span>
                       </div>
@@ -892,13 +1034,18 @@ function App() {
             </div>
           )}
 
-          <button className="theme-toggle" onClick={() => {
-            if (themeMode === 'light') setThemeMode('dark');
-            else if (themeMode === 'dark') setThemeMode('system');
-            else setThemeMode('light');
-          }} title={`Switch to ${themeMode === 'light' ? 'Dark' : themeMode === 'dark' ? 'System' : 'Light'} mode`}>
-            {themeMode === 'light' ? <Sun size={20} /> : themeMode === 'dark' ? <Moon size={20} /> : <Monitor size={20} />}
-          </button>
+          <div className="top-bar-right">
+            <button className="theme-toggle" onClick={() => {
+              if (themeMode === 'light') setThemeMode('dark');
+              else if (themeMode === 'dark') setThemeMode('system');
+              else setThemeMode('light');
+            }} title={`Switch to ${themeMode === 'light' ? 'Dark' : themeMode === 'dark' ? 'System' : 'Light'} mode`}>
+              {themeMode === 'light' ? <Sun size={20} /> : themeMode === 'dark' ? <Moon size={20} /> : <Monitor size={20} />}
+            </button>
+            <button className="icon-btn settings-top-btn" onClick={() => setIsSettingsOpen(true)} title="Open Settings">
+              <Settings size={20} />
+            </button>
+          </div>
         </div>
 
         {isSettingsOpen ? (
@@ -933,10 +1080,24 @@ function App() {
                   <span>Models</span>
                 </button>
                 <button
+                  className={`nav-item ${settingsTab === 'advanced' ? 'active' : ''}`}
+                  onClick={() => setSettingsTab('advanced')}
+                >
+                  <Cpu size={18} />
+                  <span>Intelligence</span>
+                </button>
+                <button
+                  className={`nav-item ${settingsTab === 'privacy' ? 'active' : ''}`}
+                  onClick={() => setSettingsTab('privacy')}
+                >
+                  <Shield size={18} />
+                  <span>Privacy</span>
+                </button>
+                <button
                   className={`nav-item ${settingsTab === 'system' ? 'active' : ''}`}
                   onClick={() => setSettingsTab('system')}
                 >
-                  <Settings size={18} />
+                  <Monitor size={18} />
                   <span>System</span>
                 </button>
               </nav>
@@ -965,35 +1126,77 @@ function App() {
                   </div>
 
                   <div className="profile-header-section">
-                    <div className="avatar-upload-container">
-                      <div className="avatar-preview">
-                        {userAvatar ? (
-                          <img src={userAvatar} alt="Avatar" />
-                        ) : (
-                          <div className="avatar-placeholder">
-                            <User size={40} />
-                          </div>
-                        )}
-                        <label className="avatar-edit-overlay">
-                          <ImageIcon size={20} />
-                          <input
-                            type="file"
-                            accept="image/*"
-                            hidden
-                            onChange={(e) => {
-                              const file = e.target.files[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onloadend = () => setUserAvatar(reader.result);
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                          />
-                        </label>
+                    <div className="avatar-upload-row">
+                      <div className="avatar-upload-item">
+                        <div className="avatar-preview">
+                          {userAvatar ? (
+                            <img src={userAvatar} alt="User Avatar" />
+                          ) : (
+                            <div className="avatar-placeholder">
+                              <User size={40} />
+                            </div>
+                          )}
+                          <label className="avatar-edit-overlay">
+                            <ImageIcon size={20} />
+                            <input
+                              type="file"
+                              accept="image/png, image/jpeg, image/gif, image/webp"
+                              hidden
+                              onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                  if (file.size > 2 * 1024 * 1024) {
+                                    alert("File is too large. Please select an image under 2MB.");
+                                    return;
+                                  }
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => setUserAvatar(reader.result);
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                        <div className="avatar-info">
+                          <h4>User Avatar</h4>
+                          <p>Your personal identity.</p>
+                        </div>
                       </div>
-                      <div className="avatar-info">
-                        <h4>Profile Picture</h4>
-                        <p>Upload a square image for best results.</p>
+
+                      <div className="avatar-upload-item">
+                        <div className="avatar-preview assistant-preview">
+                          {assistantAvatar ? (
+                            <img src={assistantAvatar} alt="Assistant Avatar" />
+                          ) : (
+                            <div className="avatar-placeholder">
+                              <Bot size={40} />
+                            </div>
+                          )}
+                          <label className="avatar-edit-overlay">
+                            <ImageIcon size={20} />
+                            <input
+                              type="file"
+                              accept="image/png, image/jpeg, image/gif, image/webp"
+                              hidden
+                              onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                  if (file.size > 2 * 1024 * 1024) {
+                                    alert("File is too large. Please select an image under 2MB.");
+                                    return;
+                                  }
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => setAssistantAvatar(reader.result);
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                        <div className="avatar-info">
+                          <h4>Assistant Avatar</h4>
+                          <p>The AI's personality (GIF support).</p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1120,18 +1323,21 @@ function App() {
                       </button>
                     </div>
                     <div className="installed-models-grid">
-                      {models.map(m => (
-                        <div key={m} className={`model-card ${m === model ? 'active' : ''}`}>
-                          <div className="model-card-main" onClick={() => { modelRef.current = m; setModel(m); }}>
-                            <span className="model-name">{m}</span>
-                            {m === model && <span className="active-tag">Active</span>}
+                      {Array.isArray(models) && models.length > 0 ? (
+                        models.map(m => (
+                          <div key={m} className={`model-card ${m === model ? 'active' : ''}`}>
+                            <div className="model-card-main" onClick={() => { modelRef.current = m; setModel(m); }}>
+                              <span className="model-name">{m}</span>
+                              {m === model && <span className="active-tag">Active</span>}
+                            </div>
+                            <button className="delete-btn" onClick={() => deleteModel(m)}>
+                              <Trash2 size={14} />
+                            </button>
                           </div>
-                          <button className="delete-btn" onClick={() => deleteModel(m)}>
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      ))}
-                      {models.length === 0 && <div className="empty-state">No models installed.</div>}
+                        ))
+                      ) : (
+                        <div className="empty-state">No models installed or detected.</div>
+                      )}
                     </div>
                   </div>
 
@@ -1166,11 +1372,113 @@ function App() {
                 </div>
               )}
 
+              {settingsTab === 'advanced' && (
+                <div className="settings-pane">
+                  <div className="pane-header">
+                    <h3>Intelligence Config</h3>
+                    <p>Fine-tune the neural parameters of your local assistant.</p>
+                  </div>
+
+                  <div className="settings-group">
+                    <label className="group-label">Creativity (Temperature)</label>
+                    <p className="group-desc">Higher values make the AI more creative but less predictable.</p>
+                    <div className="slider-container-premium">
+                      <input
+                        type="range"
+                        min="0"
+                        max="2"
+                        step="0.1"
+                        value={temperature}
+                        onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                        className="premium-slider"
+                      />
+                      <span className="slider-value">{temperature.toFixed(1)}</span>
+                    </div>
+                  </div>
+
+                  <div className="settings-group">
+                    <label className="group-label">Memory Limit (Context)</label>
+                    <p className="group-desc">Sets how many tokens the model can remember in a single session.</p>
+                    <div className="slider-container-premium">
+                      <input
+                        type="range"
+                        min="512"
+                        max="32768"
+                        step="512"
+                        value={contextLimit}
+                        onChange={(e) => setContextLimit(parseInt(e.target.value))}
+                        className="premium-slider"
+                      />
+                      <span className="slider-value">{contextLimit} tokens</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {settingsTab === 'privacy' && (
+                <div className="settings-pane">
+                  <div className="pane-header">
+                    <h3>Privacy & Storage</h3>
+                    <p>Manage your local footprint and conversation logs.</p>
+                  </div>
+
+                  <div className="settings-group">
+                    <div className="privacy-card">
+                      <div className="privacy-card-info">
+                        <h4>Local-Only Guarantee</h4>
+                        <p>All data is stored exclusively in your browser's LocalStorage. No data is ever sent to external servers except your Ollama host.</p>
+                      </div>
+                      <ShieldCheck size={32} className="privacy-icon" />
+                    </div>
+                  </div>
+
+                  <div className="settings-group">
+                    <label className="group-label">Destructive Actions</label>
+                    <button className="danger-action-btn" onClick={() => {
+                      if (confirm('Wipe all conversation history? This cannot be undone.')) {
+                        setChats([]);
+                        setCurrentChatId(null);
+                        localStorage.removeItem('dolphin_chats');
+                      }
+                    }}>
+                      <Trash2 size={16} />
+                      <span>Clear All Conversation History</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {settingsTab === 'system' && (
                 <div className="settings-pane">
                   <div className="pane-header">
-                    <h3>System Status</h3>
+                    <h3>System Engine</h3>
                     <p>Hardware information and local API connectivity.</p>
+                  </div>
+
+                  <div className="system-status-grid">
+                    <div className={`status-card ${apiStatus}`}>
+                      <div className="status-indicator"></div>
+                      <div className="status-info">
+                        <span className="status-label">Ollama API</span>
+                        <span className="status-val">{apiStatus === 'online' ? 'Connected' : 'Disconnected'}</span>
+                      </div>
+                    </div>
+
+                    <div className="status-card info">
+                      <Activity size={20} className="status-icon" />
+                      <div className="status-info">
+                        <span className="status-label">Engine Version</span>
+                        <span className="status-val">{ollamaVersion}</span>
+                      </div>
+                    </div>
+
+                    <div className="status-card info">
+                      <Server size={20} className="status-icon" />
+                      <div className="status-info">
+                        <span className="status-label">Host</span>
+                        <span className="status-val">localhost:11434</span>
+                      </div>
+                    </div>
                   </div>
                   <div className="system-grid-modern">
                     <div className="system-item">
@@ -1221,13 +1529,22 @@ function App() {
                   </h1>
                   <h2 className="greeting-sub">How can I help you today?</h2>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginTop: '2rem' }}>
+                    {historyIndex > 0 && (
+                      <button
+                        onClick={goBackSuggestions}
+                         style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                        title="Previous suggestions"
+                      >
+                        <ArrowLeft size={16} />
+                      </button>
+                    )}
                     <span style={{ color: 'var(--text-secondary)' }}>Try asking about...</span>
                     <button
                       onClick={refreshSuggestions}
                       style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                       title="Refresh suggestions"
                     >
-                      <RefreshCw size={16} />
+                      <RefreshCw size={16} className={isRefreshingSuggestions ? 'spin' : ''} />
                     </button>
                   </div>
                   <div className="suggestions" style={{ marginTop: '1rem' }}>
@@ -1248,10 +1565,16 @@ function App() {
                     <div key={index} className={`message ${msg.role === 'user' ? 'message-user' : 'message-bot'}`}>
                       {msg.role === 'assistant' && (
                         <div className="message-avatar bot-avatar">
-                          <img src="/logo.jpg" alt="Dolphin" className="logo-img" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }} />
-                          <svg style={{ display: 'none', width: '24px', height: '24px' }} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M18.5 7.5C18.5 7.5 16 5 12 5C8 5 4.5 8 4.5 12C4.5 12 4.5 15.5 8 18L10 20.5L12 18.5C14 16.5 16.5 14.5 18 12C19.5 9.5 18.5 7.5 18.5 7.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
+                          {assistantAvatar ? (
+                            <img src={assistantAvatar} alt="Assistant" className="chat-avatar-img" />
+                          ) : (
+                            <>
+                              <img src="/logo.jpg" alt="Dolphin" className="logo-img" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }} />
+                              <svg style={{ display: 'none', width: '24px', height: '24px' }} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M18.5 7.5C18.5 7.5 16 5 12 5C8 5 4.5 8 4.5 12C4.5 12 4.5 15.5 8 18L10 20.5L12 18.5C14 16.5 16.5 14.5 18 12C19.5 9.5 18.5 7.5 18.5 7.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            </>
+                          )}
                         </div>
                       )}
                       {msg.role === 'user' && (
