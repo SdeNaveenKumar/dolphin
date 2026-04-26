@@ -81,7 +81,7 @@ const CodeBlock = ({ language, codeString, isDark, ...props }) => {
     } else if (language === 'css') {
       content = `<style>${codeString}</style><h1>CSS Preview</h1><p>The styles have been applied.</p>`;
     } else if (language === 'javascript' || language === 'js') {
-      content = `<h1>JavaScript Preview</h1><p>Check the console (F12) for output.</p><script>${codeString}<\/script>`;
+      content = `<h1>JavaScript Preview</h1><p>Check the console (F12) for output.</p><script>${codeString}</script>`;
     } else {
       content = `<h1>${language} Code</h1><pre>${codeString}</pre>`;
     }
@@ -287,9 +287,12 @@ const MessageActions = ({ text, onRegenerate, onReact, onEdit, reactions = [], s
           </button>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 };
+
 
 
 function App() {
@@ -368,8 +371,8 @@ function App() {
   // Phase 1 States
   const [currentPersonaId, setCurrentPersonaId] = useState(() => localStorage.getItem('dolphin_current_persona') || 'default');
   const [isPersonaDropdownOpen, setIsPersonaDropdownOpen] = useState(false);
-  const [generationStats, setGenerationStats] = useState({ tps: 0, words: 0, time: 0 });
   const [isListening, setIsListening] = useState(false);
+
   const [attachedFiles, setAttachedFiles] = useState([]);
   
   // Phase 4 States
@@ -886,7 +889,7 @@ function App() {
       finalInput = `Document Context:\n${fileContext}\n\nUser Question: ${finalInput}`;
     }
 
-    const userMessage = { role: 'user', content: overrideInput !== null ? overrideInput : input.trim() };
+    const userMessage = { role: 'user', content: finalInput };
 
 
     if (selectedImage && overrideMessages === null) {
@@ -977,9 +980,8 @@ function App() {
                 saveMessageToChat(activeChatId, updated);
                 return updated;
               });
-              
-              setGenerationStats({ tps, words, time: elapsed.toFixed(1) });
             }
+
           } catch (e) {
             console.error('Error parsing JSON:', e);
           }
