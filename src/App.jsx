@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import JSZip from 'jszip';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -322,7 +323,13 @@ function App() {
       return () => mediaQuery.removeEventListener('change', listener);
     }
   }, [themeMode]);
-
+  // Phase 4 States
+  const [folders, setFolders] = useState(() => {
+    const saved = localStorage.getItem('dolphin_folders');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [expandedFolderIds, setExpandedFolderIds] = useState([]);
+  const [pendingFolderId, setPendingFolderId] = useState(null);
 
   // Chat History State
   const [chats, setChats] = useState(() => {
@@ -338,6 +345,54 @@ function App() {
   const [messages, setMessages] = useState([]);
 
   const [chatSearchQuery, setChatSearchQuery] = useState('');
+  
+  // Optimized Search Memoization
+  const searchResults = useMemo(() => {
+    if (!chatSearchQuery.trim()) return { chatMatches: new Set(), folderMatches: new Set() };
+    
+    const query = chatSearchQuery.toLowerCase();
+    const queryWords = query.split(/\s+/).filter(w => w.length > 0);
+    
+    const chatMatches = new Set();
+    const folderMatches = new Set();
+    
+    // 1. Find all matching chats
+    chats.forEach(chat => {
+      const title = (chat.title || '').toLowerCase();
+      // Combine messages into one string once per chat
+      const content = (chat.messages || []).map(m => (m.content || '')).join(' ').toLowerCase();
+      
+      const isMatch = queryWords.every(word => title.includes(word) || content.includes(word));
+      if (isMatch) chatMatches.add(chat.id);
+    });
+    
+    // 2. Identify folders that should be expanded/visible (Initial pass)
+    folders.forEach(folder => {
+      const titleMatch = queryWords.every(word => (folder.name || '').toLowerCase().includes(word));
+      const hasMatchingChat = (folder.chatIds || []).some(id => chatMatches.has(id));
+      
+      if (titleMatch || hasMatchingChat) {
+        folderMatches.add(folder.id);
+      }
+    });
+    
+    // Bubble up folder matches (if a child folder matches, parent must be visible)
+    let changed = true;
+    while (changed) {
+      changed = false;
+      folders.forEach(folder => {
+        if (folderMatches.has(folder.id)) return;
+        const hasMatchingChild = folders.some(f => f.parentId === folder.id && folderMatches.has(f.id));
+        if (hasMatchingChild) {
+          folderMatches.add(folder.id);
+          changed = true;
+        }
+      });
+    }
+    
+    return { chatMatches, folderMatches };
+  }, [chatSearchQuery, chats, folders]);
+
   const [searchMatchIndex, setSearchMatchIndex] = useState(0);
   const [totalMatches, setTotalMatches] = useState(0);
   const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
@@ -408,13 +463,6 @@ function App() {
   };
 
 
-  // Phase 4 States
-  const [folders, setFolders] = useState(() => {
-    const saved = localStorage.getItem('dolphin_folders');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [expandedFolderIds, setExpandedFolderIds] = useState([]);
-  const [pendingFolderId, setPendingFolderId] = useState(null);
 
 
 
@@ -475,6 +523,137 @@ function App() {
     a.href = url;
     a.download = `dolphin-chat-${Date.now()}.md`;
     a.click();
+  };
+
+  const exportAllData = () => {
+    const data = {
+      chats: chats,
+      folders: folders,
+      settings: {
+        userName,
+        userRole,
+        userBio,
+        userEmail,
+        themeMode,
+        accentColor,
+        temperature,
+        contextLimit
+      },
+      exportedAt: new Date().toISOString(),
+      version: "1.0.0"
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dolphin-full-export-${Date.now()}.json`;
+    a.click();
+    setLastExported(new Date().toLocaleString());
+    localStorage.setItem('dolphin_last_exported', new Date().toLocaleString());
+  };
+
+  const importData = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target.result);
+        if (confirm('Importing data will merge chats and folders. Existing settings will be overwritten. Continue?')) {
+          if (data.chats) setChats(prev => [...data.chats, ...prev.filter(c => !data.chats.some(dc => dc.id === c.id))]);
+          if (data.folders) setFolders(data.folders);
+          if (data.settings) {
+            setUserName(data.settings.userName || userName);
+            setUserRole(data.settings.userRole || userRole);
+            setAccentColor(data.settings.accentColor || accentColor);
+          }
+          alert('Data imported successfully!');
+        }
+      } catch (err) {
+        alert('Invalid data file.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = null;
+  };
+
+  const exportAllChatsMarkdown = () => {
+    if (!chats.length) return;
+    
+    let content = "# DOLPHIN - All Conversations Export\n";
+    content += `Generated on: ${new Date().toLocaleString()}\n\n---\n\n`;
+
+    chats.forEach((chat, index) => {
+      const title = chat.title || `Conversation ${index + 1}`;
+      content += `# Chat: ${title}\n`;
+      content += `ID: ${chat.id}\n\n`;
+
+      if (chat.messages && chat.messages.length) {
+        chat.messages.forEach(msg => {
+          const role = msg.role === 'user' ? '👤 YOU' : '🐬 DOLPHIN';
+          content += `### ${role}\n${msg.content}\n\n`;
+        });
+      } else {
+        content += "_No messages in this conversation._\n\n";
+      }
+      
+      content += "---\n\n";
+    });
+
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dolphin-all-chats-${Date.now()}.md`;
+    a.click();
+  };
+
+  const exportAllChatsZip = async () => {
+    if (!chats.length) return;
+    
+    const zip = new JSZip();
+    const root = zip.folder("Dolphin_Exports");
+    
+    // Create subfolders in ZIP
+    const zipFolders = {};
+    folders.forEach(f => {
+      zipFolders[f.id] = root.folder(f.name);
+    });
+
+    chats.forEach((chat, index) => {
+      const title = chat.title || `Conversation ${index + 1}`;
+      // Sanitize filename
+      const safeTitle = title.replace(/[/\\?%*:|"<>]/g, '-').trim();
+      const fileName = `${safeTitle}.md`;
+      
+      let chatContent = `# ${title}\n`;
+      chatContent += `ID: ${chat.id}\n`;
+      chatContent += `Exported: ${new Date().toLocaleString()}\n\n---\n\n`;
+
+      if (chat.messages && chat.messages.length) {
+        chat.messages.forEach(msg => {
+          const role = msg.role === 'user' ? '👤 YOU' : '🐬 DOLPHIN';
+          chatContent += `### ${role}\n${msg.content}\n\n`;
+        });
+      }
+
+      // Determine where to put the file
+      const parentFolder = folders.find(f => f.chatIds.includes(chat.id));
+      if (parentFolder && zipFolders[parentFolder.id]) {
+        zipFolders[parentFolder.id].file(fileName, chatContent);
+      } else {
+        root.file(fileName, chatContent);
+      }
+    });
+
+    const blob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dolphin-chats-organized-${Date.now()}.zip`;
+    a.click();
+    setLastExported(new Date().toLocaleString());
+    localStorage.setItem('dolphin_last_exported', new Date().toLocaleString());
   };
 
   const handleMessageEdit = (index, newContent) => {
@@ -617,6 +796,7 @@ function App() {
   const [userEmail, setUserEmail] = useState(() => localStorage.getItem('dolphin_user_email') || 'user@example.com');
   const [userAvatar, setUserAvatar] = useState(() => localStorage.getItem('dolphin_user_avatar') || null);
   const [assistantAvatar, setAssistantAvatar] = useState(() => localStorage.getItem('dolphin_assistant_avatar') || null);
+  const [lastExported, setLastExported] = useState(() => localStorage.getItem('dolphin_last_exported') || null);
 
   useEffect(() => {
     localStorage.setItem('dolphin_user_name', userName);
@@ -1240,8 +1420,17 @@ function App() {
             className="sidebar-search-input"
             onFocus={() => isSidebarCollapsed && setIsHeaderSearchActive(true)}
           />
-          {isHeaderSearchActive && (
-            <button className="close-search-btn" onClick={(e) => { e.stopPropagation(); setIsHeaderSearchActive(false); setChatSearchQuery(''); }}>
+          {chatSearchQuery && (
+            <button 
+              className="clear-search-btn" 
+              onClick={(e) => { e.stopPropagation(); setChatSearchQuery(''); searchInputRef.current?.focus(); }}
+              title="Clear search"
+            >
+              <X size={14} />
+            </button>
+          )}
+          {isHeaderSearchActive && !chatSearchQuery && (
+            <button className="close-search-btn" onClick={(e) => { e.stopPropagation(); setIsHeaderSearchActive(false); }}>
               <X size={14} />
             </button>
           )}
@@ -1266,18 +1455,13 @@ function App() {
           )}
           {isHeaderSearchActive && chatSearchQuery && (
             <div className="search-results-pills">
-              {chats.filter(c => {
-                const query = chatSearchQuery.toLowerCase();
-                return (c.title || '').toLowerCase().includes(query) ||
-                  (c.messages || []).some(m => (m.content || '').toLowerCase().includes(query));
-              }).slice(0, 5).map(chat => (
+              {chats.filter(c => searchResults.chatMatches.has(c.id)).slice(0, 5).map(chat => (
                 <div
                   key={chat.id}
                   className="search-result-pill"
                   onClick={(e) => {
                     e.stopPropagation();
                     setCurrentChatId(chat.id);
-                    // Search remains active and expanded as requested
                   }}
                 >
                   <MessageSquare size={14} />
@@ -1324,24 +1508,8 @@ function App() {
               const query = chatSearchQuery.toLowerCase();
               const hasSearch = query.length > 0;
 
-              // Recursive check if this folder or any subfolder contains a match
-              const folderMatches = (f, matchVisited = new Set()) => {
-                if (!f || !f.id || matchVisited.has(f.id)) return false;
-                matchVisited.add(f.id);
-
-                const titleMatch = (f.name || '').toLowerCase().includes(query);
-                const hasMatchingChat = chats.filter(c => f.chatIds && f.chatIds.includes(c.id)).some(c =>
-                  (c.title || '').toLowerCase().includes(query) ||
-                  (c.messages || []).some(m => (m.content || '').toLowerCase().includes(query))
-                );
-                if (titleMatch || hasMatchingChat) return true;
-
-                const children = folders.filter(cf => cf.parentId === f.id);
-                return children.some(cf => folderMatches(cf, matchVisited));
-              };
-
-              const shouldBeVisible = !hasSearch || folderMatches(folder);
-              const isEffectivelyExpanded = isExpanded || (hasSearch && folderMatches(folder));
+              const shouldBeVisible = !hasSearch || searchResults.folderMatches.has(folder.id);
+              const isEffectivelyExpanded = isExpanded || (hasSearch && searchResults.folderMatches.has(folder.id));
 
               if (!shouldBeVisible) return null;
 
@@ -1368,10 +1536,7 @@ function App() {
                       {chats.filter(c => {
                         if (!folder.chatIds || !folder.chatIds.includes(c.id)) return false;
                         if (!hasSearch) return true;
-
-                        const titleMatch = (c.title || '').toLowerCase().includes(query);
-                        const contentMatch = (c.messages || []).some(m => (m.content || '').toLowerCase().includes(query));
-                        return titleMatch || contentMatch;
+                        return searchResults.chatMatches.has(c.id);
                       }).map(chat => (
                         <div
                           key={chat.id}
@@ -1402,15 +1567,18 @@ function App() {
 
 
           {/* Uncategorized Chats Grouped by Date */}
-          {getChatGroups().map(([groupName, groupChats]) => (
-            <div key={groupName} className="chat-group">
-              <div className="group-title">{groupName}</div>
-              {groupChats.filter(c => {
-                const query = chatSearchQuery.toLowerCase();
-                const titleMatch = (c.title || '').toLowerCase().includes(query);
-                const contentMatch = (c.messages || []).some(m => (m.content || '').toLowerCase().includes(query));
-                return titleMatch || contentMatch;
-              }).map(chat => (
+          {getChatGroups().map(([groupName, groupChats]) => {
+            const filteredGroupChats = groupChats.filter(c => {
+              if (!chatSearchQuery.trim()) return true;
+              return searchResults.chatMatches.has(c.id);
+            });
+
+            if (filteredGroupChats.length === 0) return null;
+
+            return (
+              <div key={groupName} className="chat-group">
+                <div className="group-title">{groupName}</div>
+                {filteredGroupChats.map(chat => (
                 <div
                   key={chat.id}
                   className={`sidebar-item ${currentChatId === chat.id ? 'active' : ''}`}
@@ -1439,15 +1607,20 @@ function App() {
                       <Trash2 size={16} />
                     </button>
                   </div>
-                </div>
-              ))}
-            </div>
-          ))}
+                  </div>
+                ))}
+              </div>
+            )
+          })}
         </div>
 
 
 
         <div className="sidebar-bottom">
+          <div className="security-status-badge" title="Running in isolated local environment. No data leaves your machine.">
+            <ShieldCheck size={14} />
+            <span>Secure Local</span>
+          </div>
           <div className={`sidebar-item ${isSettingsOpen ? 'active' : ''}`} onClick={() => setIsSettingsOpen(!isSettingsOpen)}>
             <Settings size={18} />
             <span>Settings</span>
@@ -1509,9 +1682,9 @@ function App() {
               )}
             </div>
 
-            <button 
-              className={`icon-btn refresh-top-btn ${isRefreshingModels ? 'refreshing' : ''}`} 
-              onClick={fetchModels} 
+            <button
+              className={`icon-btn refresh-top-btn ${isRefreshingModels ? 'refreshing' : ''}`}
+              onClick={fetchModels}
               title="Refresh models"
               disabled={isRefreshingModels}
             >
@@ -1574,9 +1747,6 @@ function App() {
             }} title={`Switch to ${themeMode === 'light' ? 'Dark' : themeMode === 'dark' ? 'System' : 'Light'} mode`}>
               {themeMode === 'light' ? <Sun size={20} /> : themeMode === 'dark' ? <Moon size={20} /> : <Monitor size={20} />}
             </button>
-            <button className="icon-btn settings-top-btn" onClick={() => setIsSettingsOpen(true)} title="Open Settings">
-              <Settings size={20} />
-            </button>
           </div>
         </div>
 
@@ -1632,6 +1802,13 @@ function App() {
                   <Monitor size={18} />
                   <span>System</span>
                 </button>
+                <button
+                  className={`nav-item ${settingsTab === 'data' ? 'active' : ''}`}
+                  onClick={() => setSettingsTab('data')}
+                >
+                  <Download size={18} />
+                  <span>Data & Export</span>
+                </button>
               </nav>
               <div className="settings-sidebar-footer">
                 <button
@@ -1650,8 +1827,9 @@ function App() {
             </div>
 
             <div className="settings-content">
-              {settingsTab === 'profile' && (
-                <div className="settings-pane">
+              <div key={settingsTab} className="tab-transition-wrapper">
+                {settingsTab === 'profile' && (
+                  <div className="settings-pane">
                   <div className="pane-header">
                     <h3>User Profile</h3>
                     <p>Manage your identity and how the assistant addresses you.</p>
@@ -2043,6 +2221,108 @@ function App() {
                   </div>
                 </div>
               )}
+
+              {settingsTab === 'data' && (
+                <div className="settings-pane">
+                  <div className="pane-header">
+                    <h3>Data Management</h3>
+                    <p>Control your data, export history, and manage local storage backups.</p>
+                  </div>
+
+                  {/* Stats Dashboard */}
+                  <div className="data-stats-grid">
+                    <div className="stats-card-premium">
+                      <div className="stats-icon-wrapper blue">
+                        <MessageSquare size={18} />
+                      </div>
+                      <div className="stats-details">
+                        <span className="stats-label-small">Conversations</span>
+                        <span className="stats-value-large">{chats.length}</span>
+                      </div>
+                    </div>
+                    <div className="stats-card-premium">
+                      <div className="stats-icon-wrapper green">
+                        <Folder size={18} />
+                      </div>
+                      <div className="stats-details">
+                        <span className="stats-label-small">Folders</span>
+                        <span className="stats-value-large">{folders.length}</span>
+                      </div>
+                    </div>
+                    <div className="stats-card-premium">
+                      <div className="stats-icon-wrapper purple">
+                        <RefreshCw size={18} />
+                      </div>
+                      <div className="stats-details">
+                        <span className="stats-label-small">Last Exported</span>
+                        <span className="stats-value-large">{lastExported || 'Never'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="settings-group">
+                    <label className="group-label">Export Options</label>
+                    <p className="group-desc">Choose the format that best fits your needs.</p>
+                    
+                    <div className="export-grid-modern">
+                      <div className="export-item-card" onClick={exportAllData}>
+                        <div className="export-item-header">
+                          <div className="file-icon-badge json">JSON</div>
+                          <Download size={18} />
+                        </div>
+                        <h4>Full System Backup</h4>
+                        <p>Includes all chats, folders, and application settings. Best for restoring data later.</p>
+                      </div>
+
+                      <div className="export-item-card" onClick={exportAllChatsZip}>
+                        <div className="export-item-header">
+                          <div className="file-icon-badge zip">ZIP</div>
+                          <FolderOpen size={18} />
+                        </div>
+                        <h4>Organized Archive</h4>
+                        <p>Exports each chat as a separate Markdown file, organized into folders. Best for local archives.</p>
+                      </div>
+
+                      <div className="export-item-card" onClick={exportAllChatsMarkdown}>
+                        <div className="export-item-header">
+                          <div className="file-icon-badge md">MD</div>
+                          <MessageSquare size={18} />
+                        </div>
+                        <h4>Single Transcript</h4>
+                        <p>A single, beautifully formatted Markdown file containing all your conversations.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="settings-group">
+                    <label className="group-label">Restore Data</label>
+                    <div className="import-zone-premium">
+                      <div className="import-icon-stack">
+                        <RefreshCw size={24} className="import-main-icon" />
+                      </div>
+                      <div className="import-text">
+                        <h4>Import Backup File</h4>
+                        <p>Select a `.json` file exported from Dolphin to restore your session.</p>
+                      </div>
+                      <label className="premium-btn">
+                        <span>Browse Files</span>
+                        <input type="file" accept=".json" onChange={importData} style={{ display: 'none' }} />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="settings-group">
+                    <div className="info-card premium-info">
+                      <ShieldCheck size={24} className="info-icon" />
+                      <div className="info-content">
+                        <h4>Privacy-First Storage</h4>
+                        <p>Dolphin uses <strong>IndexedDB and LocalStorage</strong> technology. Your data resides solely on this device's physical storage and never touches the cloud. We recommend regular exports to keep your data safe.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              </div>
             </div>
           </div>
         ) : (
